@@ -95,6 +95,7 @@ export default function ClientsPage() {
     };
 
     setClients((prev) => [newClient, ...prev]);
+    mockClients.unshift(newClient);
     resetForm();
     setIsAddModalOpen(false);
   };
@@ -120,6 +121,20 @@ export default function ClientsPage() {
           : c
       )
     );
+    const idx = mockClients.findIndex((c) => c.id === editingClient.id);
+    if (idx !== -1) {
+      mockClients[idx] = {
+        ...mockClients[idx],
+        name: formName.trim(),
+        company_name: formCompany.trim() || null,
+        email: formEmail.trim() || null,
+        phone: formPhone.trim() || null,
+        pan_number: formPan.trim() || null,
+        gst_number: formGst.trim() || null,
+        address: formAddress.trim() || null,
+        updated_at: new Date().toISOString(),
+      };
+    }
     resetForm();
     setEditingClient(null);
   };
@@ -143,6 +158,14 @@ export default function ClientsPage() {
           : c
       )
     );
+    const idx = mockClients.findIndex((c) => c.id === clientId);
+    if (idx !== -1) {
+      mockClients[idx] = {
+        ...mockClients[idx],
+        is_active: !mockClients[idx].is_active,
+        updated_at: new Date().toISOString(),
+      };
+    }
   };
 
   if (!user) return null;
