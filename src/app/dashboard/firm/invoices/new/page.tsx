@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { getDemoUser } from '@/lib/auth';
 import { mockClients, mockInvoices } from '@/lib/mock-data';
 import { formatCurrency } from '@/lib/utils';
-import type { Profile, InvoiceItem } from '@/lib/types';
+import type { Profile, Invoice, InvoiceItem } from '@/lib/types';
 
 function generateInvoiceNumber(): string {
   const year = new Date().getFullYear();
@@ -113,9 +113,34 @@ export default function NewInvoicePage() {
 
     setIsSaving(true);
 
-    // Simulate save (demo mode)
+    const now = new Date().toISOString();
+    const newInvoice: Invoice = {
+      id: `inv-${Date.now()}`,
+      firm_id: user!.firm_id!,
+      client_id: clientId,
+      invoice_number: invoiceNumber,
+      items: items.filter(i => i.description.trim() && i.amount > 0),
+      subtotal,
+      gst_rate: gstRate,
+      gst_amount: gstAmount,
+      total,
+      status: sendAfterSave ? 'sent' : 'draft',
+      due_date: dueDate,
+      notes: notes || undefined,
+      created_by: user!.id,
+      created_at: now,
+      updated_at: now,
+    };
+
+    // Persist to mock data so it appears in the invoices list
+    mockInvoices.unshift(newInvoice);
+
     setTimeout(() => {
       setIsSaving(false);
+      if (sendAfterSave) {
+        const client = firmClients.find(c => c.id === clientId);
+        alert(`Invoice ${invoiceNumber} saved and marked as Sent to ${client?.name ?? 'client'}.\n\nNote: Email delivery will be available once backend integration is complete.`);
+      }
       router.push('/dashboard/firm/invoices');
     }, 500);
   };
