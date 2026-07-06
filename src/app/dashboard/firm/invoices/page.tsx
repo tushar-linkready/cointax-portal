@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Search, Eye, IndianRupee, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react';
+import { Plus, Search, Eye, IndianRupee, AlertTriangle, Clock, CheckCircle2, Mail, MessageCircle } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -26,6 +26,63 @@ function getStatusBadgeVariant(status: InvoiceStatus) {
     cancelled: 'default',
   };
   return map[status];
+}
+
+function generateInvoiceEmailBody(inv: Invoice): string {
+  const itemsList = inv.items
+    .map((item, i) => `${i + 1}. ${item.description} — Qty: ${item.quantity}, Rate: ${formatCurrency(item.rate)}, Amount: ${formatCurrency(item.amount)}`)
+    .join('\n');
+
+  return `Dear ${inv.client?.name ?? 'Client'},
+
+Please find below the details for Invoice ${inv.invoice_number}:
+
+${itemsList}
+
+Subtotal: ${formatCurrency(inv.subtotal)}
+GST @ ${inv.gst_rate}%: ${formatCurrency(inv.gst_amount)}
+Total: ${formatCurrency(inv.total)}
+
+Due Date: ${formatDate(inv.due_date)}
+${inv.notes ? `\nNotes: ${inv.notes}` : ''}
+
+Please make the payment by the due date. For any queries, feel free to reach out.
+
+Regards,
+Cointax Financial Services LLP`;
+}
+
+function generateWhatsAppMessage(inv: Invoice): string {
+  const itemsList = inv.items
+    .map((item, i) => `${i + 1}. ${item.description} — ${formatCurrency(item.amount)}`)
+    .join('\n');
+
+  return `Hi ${inv.client?.name ?? ''},
+
+Here is your invoice from *Cointax Financial Services LLP*:
+
+*Invoice:* ${inv.invoice_number}
+*Due Date:* ${formatDate(inv.due_date)}
+
+${itemsList}
+
+*Total: ${formatCurrency(inv.total)}* (incl. GST @ ${inv.gst_rate}%)
+${inv.notes ? `\n_${inv.notes}_` : ''}
+
+Please make the payment by the due date. Thank you!`;
+}
+
+function openEmailForInvoice(inv: Invoice) {
+  const subject = encodeURIComponent(`Invoice ${inv.invoice_number} — Cointax Financial Services LLP`);
+  const body = encodeURIComponent(generateInvoiceEmailBody(inv));
+  const to = inv.client?.email ?? '';
+  window.open(`mailto:${to}?subject=${subject}&body=${body}`, '_blank');
+}
+
+function openWhatsAppForInvoice(inv: Invoice) {
+  const phone = (inv.client?.phone ?? '').replace(/[\s\-\+]/g, '');
+  const message = encodeURIComponent(generateWhatsAppMessage(inv));
+  window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
 }
 
 export default function FirmInvoicesPage() {
@@ -339,7 +396,36 @@ export default function FirmInvoicesPage() {
                 </div>
               )}
 
-              {/* Status update buttons */}
+{/* Send buttons */}
+              {selectedInvoice.status !== 'cancelled' && (
+                <div className="border-t border-gray-200 pt-4">
+                  <p className="text-xs font-medium text-gray-500 mb-2">Send Invoice</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {selectedInvoice.client?.email && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEmailForInvoice(selectedInvoice)}
+                      >
+                        <Mail className="w-4 h-4 mr-1" />
+                        Send Email
+                      </Button>
+                    )}
+                    {selectedInvoice.client?.phone && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openWhatsAppForInvoice(selectedInvoice)}
+                      >
+                        <MessageCircle className="w-4 h-4 mr-1" />
+                        Send WhatsApp
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+                            {/* Status update buttons */}
               <div className="flex gap-2 flex-wrap pt-2">
                 {selectedInvoice.status === 'draft' && (
                   <Button
