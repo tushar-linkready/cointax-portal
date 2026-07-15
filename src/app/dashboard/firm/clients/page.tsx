@@ -16,19 +16,20 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/Table';
-import { getDemoUser } from '@/lib/auth';
-import { mockClients } from '@/lib/mock-data';
+import { useAuth } from '@/lib/auth';
+import { getClients, createClient, updateClient } from '@/lib/services';
 import { formatDate } from '@/lib/utils';
 import type { Client, Profile } from '@/lib/types';
 import { Plus, Search, Pencil, Users } from 'lucide-react';
 
 export default function ClientsPage() {
   const router = useRouter();
-  const [user, setUser] = useState<Profile | null>(null);
+  const { profile, loading, firmId } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [dataLoading, setDataLoading] = useState(true);
 
   // Add form state
   const [formName, setFormName] = useState('');
@@ -40,17 +41,24 @@ export default function ClientsPage() {
   const [formAddress, setFormAddress] = useState('');
 
   useEffect(() => {
-    const currentUser = getDemoUser();
-    if (!currentUser) {
+    if (loading) return;
+    if (!profile) {
       router.push('/login');
       return;
     }
-    setUser(currentUser);
-    const firmClients = mockClients.filter(
-      (c) => c.firm_id === currentUser.firm_id
-    );
-    setClients(firmClients);
-  }, [router]);
+
+    const loadData = async () => {
+      try {
+        const data = await getClients(firmId!);
+        setClients(data);
+      } catch (err) {
+        console.error('Failed to load clients:', err);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    loadData();
+  }, [profile, loading, firmId, router]);
 
   const filteredClients = useMemo(() => {
     if (!searchQuery.trim()) return clients;
@@ -75,56 +83,13 @@ export default function ClientsPage() {
     setFormAddress('');
   };
 
-  const handleAddClient = (e: React.FormEvent) => {
+  const handleAddClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
 
-    const newClient: Client = {
-      id: `client-${Date.now()}`,
-      firm_id: user?.firm_id ?? '',
-      name: formName.trim(),
-      company_name: formCompany.trim() || null,
-      email: formEmail.trim() || null,
-      phone: formPhone.trim() || null,
-      pan_number: formPan.trim() || null,
-      gst_number: formGst.trim() || null,
-      address: formAddress.trim() || null,
-      is_active: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    setClients((prev) => [newClient, ...prev]);
-    mockClients.unshift(newClient);
-    resetForm();
-    setIsAddModalOpen(false);
-  };
-
-  const handleEditClient = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingClient || !formName.trim()) return;
-
-    setClients((prev) =>
-      prev.map((c) =>
-        c.id === editingClient.id
-          ? {
-              ...c,
-              name: formName.trim(),
-              company_name: formCompany.trim() || null,
-              email: formEmail.trim() || null,
-              phone: formPhone.trim() || null,
-              pan_number: formPan.trim() || null,
-              gst_number: formGst.trim() || null,
-              address: formAddress.trim() || null,
-              updated_at: new Date().toISOString(),
-            }
-          : c
-      )
-    );
-    const idx = mockClients.findIndex((c) => c.id === editingClient.id);
-    if (idx !== -1) {
-      mockClients[idx] = {
-        ...mockClients[idx],
+    try {
+      const newClient = await createClient({
+        firm_id: firmId!,
         name: formName.trim(),
         company_name: formCompany.trim() || null,
         email: formEmail.trim() || null,
@@ -132,11 +97,39 @@ export default function ClientsPage() {
         pan_number: formPan.trim() || null,
         gst_number: formGst.trim() || null,
         address: formAddress.trim() || null,
-        updated_at: new Date().toISOString(),
-      };
+      });
+      setClients((prev) => [newClient, ...prev]);
+      resetForm();
+      setIsAddModalOpen(false);
+    } catch (err) {
+      console.error('Failed to create client:', err);
+      alert('Failed to create client. Please try again.');
     }
-    resetForm();
-    setEditingClient(null);
+  };
+
+  const handleEditClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClient || !formName.trim()) return;
+
+    try {
+      const updated = await updateClient(editingClient.id, {
+        name: formName.trim(),
+        company_name: formCompany.trim() || null,
+        email: formEmail.trim() || null,
+        phone: formPhone.trim() || null,
+        pan_number: formPan.trim() || null,
+        gst_number: formGst.trim() || null,
+        address: formAddress.trim() || null,
+      });
+      setClients((prev) =>
+        prev.map((c) => (c.id === editingClient.id ? updated : c))
+      );
+      resetForm();
+      setEditingClient(null);
+    } catch (err) {
+      console.error('Failed to update client:', err);
+      alert('Failed to update client. Please try again.');
+    }
   };
 
   const openEditModal = (client: Client) => {
@@ -150,25 +143,34 @@ export default function ClientsPage() {
     setEditingClient(client);
   };
 
-  const handleToggleStatus = (clientId: string) => {
-    setClients((prev) =>
-      prev.map((c) =>
-        c.id === clientId
-          ? { ...c, is_active: !c.is_active, updated_at: new Date().toISOString() }
-          : c
-      )
-    );
-    const idx = mockClients.findIndex((c) => c.id === clientId);
-    if (idx !== -1) {
-      mockClients[idx] = {
-        ...mockClients[idx],
-        is_active: !mockClients[idx].is_active,
-        updated_at: new Date().toISOString(),
-      };
+  const handleToggleStatus = async (clientId: string) => {
+    const client = clients.find((c) => c.id === clientId);
+    if (!client) return;
+
+    try {
+      const updated = await updateClient(clientId, {
+        is_active: !client.is_active,
+      });
+      setClients((prev) =>
+        prev.map((c) => (c.id === clientId ? updated : c))
+      );
+    } catch (err) {
+      console.error('Failed to toggle client status:', err);
+      alert('Failed to update client status. Please try again.');
     }
   };
 
-  if (!user) return null;
+  if (loading || dataLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-12">
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!profile) return null;
 
   const clientForm = (
     <>

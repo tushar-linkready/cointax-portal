@@ -8,50 +8,78 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { TaskForm } from '@/components/tasks/TaskForm';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
-import { getDemoUser } from '@/lib/auth';
-import { mockClients, mockCategories, mockProfiles } from '@/lib/mock-data';
-import type { Profile, Client, TaskCategory } from '@/lib/types';
+import { useAuth } from '@/lib/auth';
+import { getClients, getCategories, getProfiles, createTask } from '@/lib/services';
+import type { Client, TaskCategory, Profile } from '@/lib/types';
 import type { TaskFormData } from '@/components/tasks/TaskForm';
 
 export default function NewTaskPage() {
   const router = useRouter();
-  const [user, setUser] = useState<Profile | null>(null);
+  const { profile, loading, firmId } = useAuth();
   const [firmClients, setFirmClients] = useState<Client[]>([]);
   const [firmCategories, setFirmCategories] = useState<TaskCategory[]>([]);
   const [teamMembers, setTeamMembers] = useState<Profile[]>([]);
   const [submitted, setSubmitted] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
-    const currentUser = getDemoUser();
-    if (!currentUser) {
+    if (loading) return;
+    if (!profile) {
       router.push('/login');
       return;
     }
-    setUser(currentUser);
 
-    const firmId = currentUser.firm_id;
+    const loadData = async () => {
+      try {
+        const [clients, categories, profiles] = await Promise.all([
+          getClients(firmId!),
+          getCategories(firmId!),
+          getProfiles(firmId!),
+        ]);
+        setFirmClients(clients);
+        setFirmCategories(categories);
+        setTeamMembers(profiles.filter((p) => p.role === 'team_member'));
+      } catch (err) {
+        console.error('Failed to load form data:', err);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    loadData();
+  }, [profile, loading, firmId, router]);
 
-    const clients = mockClients.filter((c) => c.firm_id === firmId);
-    setFirmClients(clients);
-
-    const categories = mockCategories.filter(
-      (cat) => cat.firm_id === firmId || cat.is_preset
-    );
-    setFirmCategories(categories);
-
-    const members = mockProfiles.filter(
-      (p) => p.firm_id === firmId && p.role === 'team_member'
-    );
-    setTeamMembers(members);
-  }, [router]);
-
-  const handleSubmit = (data: TaskFormData) => {
-    // In a real app, this would POST to an API
-    console.log('New task data:', data);
-    setSubmitted(true);
+  const handleSubmit = async (data: TaskFormData) => {
+    try {
+      await createTask({
+        firm_id: firmId!,
+        client_id: data.client_id,
+        category_id: data.category_id || null,
+        title: data.title,
+        description: data.description || null,
+        status: data.assignee_id ? 'assigned' : 'pending_approval',
+        priority: data.priority,
+        assignee_id: data.assignee_id || null,
+        created_by: profile!.id,
+        due_date: data.due_date || null,
+      });
+      setSubmitted(true);
+    } catch (err) {
+      console.error('Failed to create task:', err);
+      alert('Failed to create task. Please try again.');
+    }
   };
 
-  if (!user) {
+  if (loading || dataLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-12">
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!profile) {
     return null;
   }
 

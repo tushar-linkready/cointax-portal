@@ -16,9 +16,10 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
-import { getDemoUser } from '@/lib/auth';
-import { mockCategories } from '@/lib/mock-data';
-import type { Profile } from '@/lib/types';
+import { useAuth } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
+import { getCategories, createTask } from '@/lib/services';
+import type { TaskCategory } from '@/lib/types';
 
 interface FileItem {
   name: string;
@@ -27,8 +28,11 @@ interface FileItem {
 
 export default function ClientNewRequestPage() {
   const router = useRouter();
-  const [user, setUser] = useState<Profile | null>(null);
+  const { profile, loading, firmId } = useAuth();
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [categories, setCategories] = useState<TaskCategory[]>([]);
+  const [clientId, setClientId] = useState<string | null>(null);
 
   // Form state
   const [categoryId, setCategoryId] = useState('');
@@ -39,20 +43,31 @@ export default function ClientNewRequestPage() {
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
-    const currentUser = getDemoUser();
-    if (!currentUser) {
-      router.push('/login');
-      return;
-    }
-    if (currentUser.role !== 'client') {
-      router.push('/login');
-      return;
-    }
-    setUser(currentUser);
-  }, [router]);
+    if (loading) return;
+    if (!profile) { router.push('/login'); return; }
+    if (profile.role !== 'client') { router.push('/login'); return; }
 
-  const activeCategories = mockCategories.filter((c) => c.is_active);
-  const categoryOptions = activeCategories.map((c) => ({
+    const fetchData = async () => {
+      try {
+        // Find client record by email
+        const { data: clients } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('email', profile.email)
+          .limit(1);
+        if (clients?.[0]) setClientId(clients[0].id);
+
+        // Load categories
+        const cats = await getCategories(firmId);
+        setCategories(cats);
+      } catch (err) {
+        console.error('Error loading form data:', err);
+      }
+    };
+    fetchData();
+  }, [profile, loading, firmId, router]);
+
+  const categoryOptions = categories.map((c) => ({
     value: c.id,
     label: c.name,
   }));
@@ -69,11 +84,28 @@ export default function ClientNewRequestPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    // In demo mode, we just show the success screen
-    setSubmitted(true);
+    if (!firmId || !clientId) return;
+
+    setSubmitting(true);
+    try {
+      await createTask({
+        firm_id: firmId,
+        client_id: clientId,
+        category_id: categoryId || null,
+        title: title.trim(),
+        description: description.trim() || null,
+        created_by: profile?.id || null,
+      });
+      setSubmitted(true);
+    } catch (err) {
+      console.error('Error creating task:', err);
+      setErrors({ submit: 'Failed to submit request. Please try again.' });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -131,7 +163,7 @@ export default function ClientNewRequestPage() {
     setSubmitted(false);
   };
 
-  if (!user) {
+  if (loading || !profile) {
     return null;
   }
 

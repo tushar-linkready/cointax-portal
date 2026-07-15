@@ -1,13 +1,16 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { mockFirms, mockProfiles, mockTasks, mockClients } from '@/lib/mock-data';
-import { formatDate, formatCurrency } from '@/lib/utils';
+import { useAuth } from '@/lib/auth';
+import { getSuperAdminStats, getFirms, getAllTasks, getAllClients } from '@/lib/services';
+import { formatCurrency } from '@/lib/utils';
 import { Building2, CheckCircle, IndianRupee, Users } from 'lucide-react';
+import type { Firm, Task, Client } from '@/lib/types';
 
 const PLAN_PRICES: Record<string, number> = {
   starter: 499,
@@ -16,26 +19,61 @@ const PLAN_PRICES: Record<string, number> = {
 };
 
 export default function SuperAdminDashboard() {
-  const stats = useMemo(() => {
-    const totalFirms = mockFirms.length;
-    const activeFirms = mockFirms.filter((f) => f.is_active).length;
-    const totalRevenue = mockFirms
-      .filter((f) => f.is_active)
-      .reduce((sum, f) => sum + (PLAN_PRICES[f.plan] || 0), 0);
-    const totalUsers = mockProfiles.length;
-    return { totalFirms, activeFirms, totalRevenue, totalUsers };
-  }, []);
+  const router = useRouter();
+  const { profile, loading } = useAuth();
+  const [stats, setStats] = useState({ totalFirms: 0, activeFirms: 0, totalRevenue: 0, totalUsers: 0 });
+  const [firms, setFirms] = useState<Firm[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
 
-  const taskSummary = useMemo(() => {
-    const total = mockTasks.length;
-    const completed = mockTasks.filter((t) => t.status === 'completed').length;
-    const inProgress = mockTasks.filter((t) => t.status === 'in_progress').length;
-    const pending = mockTasks.filter((t) => t.status === 'pending_approval').length;
-    const overdue = mockTasks.filter(
+  useEffect(() => {
+    if (loading) return;
+    if (!profile) { router.push('/login'); return; }
+
+    const fetchData = async () => {
+      try {
+        const [adminStats, firmsData, tasksData, clientsData] = await Promise.all([
+          getSuperAdminStats(),
+          getFirms(),
+          getAllTasks(),
+          getAllClients(),
+        ]);
+
+        const totalRevenue = firmsData
+          .filter((f) => f.is_active)
+          .reduce((sum, f) => sum + (PLAN_PRICES[f.plan] || 0), 0);
+
+        setStats({
+          totalFirms: adminStats.totalFirms,
+          activeFirms: adminStats.activeFirms,
+          totalRevenue,
+          totalUsers: adminStats.totalUsers,
+        });
+        setFirms(firmsData);
+        setTasks(tasksData);
+        setClients(clientsData);
+      } catch (err) {
+        console.error('Error fetching super admin data:', err);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    fetchData();
+  }, [profile, loading, router]);
+
+  const taskSummary = (() => {
+    const total = tasks.length;
+    const completed = tasks.filter((t) => t.status === 'completed').length;
+    const inProgress = tasks.filter((t) => t.status === 'in_progress').length;
+    const pending = tasks.filter((t) => t.status === 'pending_approval').length;
+    const overdue = tasks.filter(
       (t) => t.due_date && new Date(t.due_date) < new Date() && t.status !== 'completed'
     ).length;
     return { total, completed, inProgress, pending, overdue };
-  }, []);
+  })();
+
+  if (loading || !profile) return null;
 
   return (
     <DashboardLayout>
@@ -62,7 +100,7 @@ export default function SuperAdminDashboard() {
             value={stats.activeFirms}
             icon={CheckCircle}
             color="#0d9488"
-            change={`${Math.round((stats.activeFirms / stats.totalFirms) * 100)}% active`}
+            change={stats.totalFirms > 0 ? `${Math.round((stats.activeFirms / stats.totalFirms) * 100)}% active` : '0% active'}
             trend="up"
           />
           <StatsCard
@@ -89,10 +127,7 @@ export default function SuperAdminDashboard() {
               <h2 className="text-lg font-semibold text-gray-900">Registered Firms</h2>
             </CardHeader>
             <CardContent className="divide-y divide-gray-100">
-              {mockFirms.map((firm) => {
-                const clientCount = mockClients.filter((c) => c.firm_id === firm.id).length;
-                const firmTasks = mockTasks.filter((t) => t.firm_id === firm.id).length;
-                return (
+              {firms.map((firm) => (
                   <div key={firm.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-gray-900 truncate">{firm.name}</p>
@@ -107,8 +142,10 @@ export default function SuperAdminDashboard() {
                       </Badge>
                     </div>
                   </div>
-                );
-              })}
+              ))}
+              {firms.length === 0 && !dataLoading && (
+                <p className="py-4 text-center text-sm text-gray-500">No firms registered yet.</p>
+              )}
             </CardContent>
           </Card>
 
@@ -134,9 +171,9 @@ export default function SuperAdminDashboard() {
               {/* Per-firm breakdown */}
               <div className="mt-4 border-t border-gray-100 pt-4">
                 <p className="mb-3 text-sm font-medium text-gray-700">Per-Firm Breakdown</p>
-                {mockFirms.map((firm) => {
-                  const firmTaskCount = mockTasks.filter((t) => t.firm_id === firm.id).length;
-                  const firmCompleted = mockTasks.filter(
+                {firms.map((firm) => {
+                  const firmTaskCount = tasks.filter((t) => t.firm_id === firm.id).length;
+                  const firmCompleted = tasks.filter(
                     (t) => t.firm_id === firm.id && t.status === 'completed'
                   ).length;
                   return (

@@ -2,19 +2,20 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getDemoUser, getDashboardPath } from '@/lib/auth';
+import { useAuth, getDashboardPath } from '@/lib/auth';
 
 export default function DashboardRedirectPage() {
   const router = useRouter();
+  const { profile, loading } = useAuth();
 
   useEffect(() => {
-    const user = getDemoUser();
-    if (user) {
-      router.replace(getDashboardPath(user.role));
+    if (loading) return;
+    if (profile) {
+      router.replace(getDashboardPath(profile.role));
     } else {
       router.replace('/login');
     }
-  }, [router]);
+  }, [profile, loading, router]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">

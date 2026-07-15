@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { getDemoUser } from '@/lib/auth';
+import { useState } from 'react';
+import { useAuth } from '@/lib/auth';
 import Sidebar from './Sidebar';
 import Header from './Header';
 
@@ -11,20 +10,10 @@ interface DashboardLayoutProps {
 }
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
-  const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
+  const { loading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  useEffect(() => {
-    const user = getDemoUser();
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-    setIsLoading(false);
-  }, [router]);
-
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <div className="flex flex-col items-center gap-3">

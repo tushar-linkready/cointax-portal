@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   CheckSquare,
@@ -16,11 +16,11 @@ import {
   LogOut,
   X,
 } from 'lucide-react';
-import { getDemoUser, demoLogout } from '@/lib/auth';
+import { useAuth } from '@/lib/auth';
 import { NAV_ITEMS } from '@/lib/constants';
-import { mockFirms } from '@/lib/mock-data';
+import { getFirm } from '@/lib/services';
 import { cn, getInitials } from '@/lib/utils';
-import type { UserRole } from '@/lib/types';
+import type { UserRole, Firm } from '@/lib/types';
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard,
@@ -48,17 +48,21 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
-  const user = getDemoUser();
+  const { profile, signOut } = useAuth();
+  const [firm, setFirm] = useState<Firm | null>(null);
 
-  if (!user) return null;
+  useEffect(() => {
+    if (profile?.firm_id) {
+      getFirm(profile.firm_id).then(setFirm).catch(console.error);
+    }
+  }, [profile?.firm_id]);
 
-  const navItems = NAV_ITEMS[user.role] || [];
-  const firm = user.firm_id ? mockFirms.find((f) => f.id === user.firm_id) : null;
+  if (!profile) return null;
+
+  const navItems = NAV_ITEMS[profile.role] || [];
 
   const handleLogout = () => {
-    demoLogout();
-    router.push('/login');
+    signOut();
   };
 
   return (
@@ -137,14 +141,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="border-t border-navy-700 p-4">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-teal-600 text-sm font-semibold text-white">
-              {getInitials(user.full_name)}
+              {getInitials(profile.full_name)}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">
-                {user.full_name}
+                {profile.full_name}
               </p>
               <span className="inline-block mt-0.5 rounded-full bg-navy-700 px-2 py-0.5 text-xs font-medium text-navy-200">
-                {ROLE_LABELS[user.role]}
+                {ROLE_LABELS[profile.role]}
               </span>
             </div>
           </div>

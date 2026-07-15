@@ -9,36 +9,47 @@ import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Textarea } from '@/components/ui/Textarea';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
-import { getDemoUser } from '@/lib/auth';
-import { mockCategories } from '@/lib/mock-data';
-import type { TaskCategory, Profile } from '@/lib/types';
+import { useAuth } from '@/lib/auth';
+import { getCategories, createCategory, updateCategory } from '@/lib/services';
+import type { TaskCategory } from '@/lib/types';
 import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
 
 export default function CategoriesPage() {
   const router = useRouter();
-  const [user, setUser] = useState<Profile | null>(null);
+  const { profile, loading, firmId } = useAuth();
   const [categories, setCategories] = useState<TaskCategory[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<TaskCategory | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [dataLoading, setDataLoading] = useState(true);
 
   // Form state
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
 
   useEffect(() => {
-    const currentUser = getDemoUser();
-    if (!currentUser) {
+    if (loading) return;
+    if (!profile) {
       router.push('/login');
       return;
     }
-    setUser(currentUser);
-    setCategories([...mockCategories]);
-  }, [router]);
+
+    const loadData = async () => {
+      try {
+        const data = await getCategories(firmId!);
+        setCategories(data);
+      } catch (err) {
+        console.error('Failed to load categories:', err);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    loadData();
+  }, [profile, loading, firmId, router]);
 
   const presetCategories = categories.filter((c) => c.is_preset && !c.firm_id);
   const customCategories = categories.filter(
-    (c) => !c.is_preset && c.firm_id === user?.firm_id
+    (c) => !c.is_preset && c.firm_id === firmId
   );
 
   const resetForm = () => {
@@ -46,42 +57,43 @@ export default function CategoriesPage() {
     setFormDescription('');
   };
 
-  const handleAddCategory = (e: React.FormEvent) => {
+  const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
 
-    const newCategory: TaskCategory = {
-      id: `cat-${Date.now()}`,
-      firm_id: user?.firm_id ?? null,
-      name: formName.trim(),
-      description: formDescription.trim() || null,
-      is_preset: false,
-      is_active: true,
-      created_at: new Date().toISOString(),
-    };
-
-    setCategories((prev) => [...prev, newCategory]);
-    resetForm();
-    setIsAddModalOpen(false);
+    try {
+      const newCategory = await createCategory({
+        firm_id: firmId!,
+        name: formName.trim(),
+        description: formDescription.trim() || null,
+      });
+      setCategories((prev) => [...prev, newCategory]);
+      resetForm();
+      setIsAddModalOpen(false);
+    } catch (err) {
+      console.error('Failed to create category:', err);
+      alert('Failed to create category. Please try again.');
+    }
   };
 
-  const handleEditCategory = (e: React.FormEvent) => {
+  const handleEditCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCategory || !formName.trim()) return;
 
-    setCategories((prev) =>
-      prev.map((c) =>
-        c.id === editingCategory.id
-          ? {
-              ...c,
-              name: formName.trim(),
-              description: formDescription.trim() || null,
-            }
-          : c
-      )
-    );
-    resetForm();
-    setEditingCategory(null);
+    try {
+      const updated = await updateCategory(editingCategory.id, {
+        name: formName.trim(),
+        description: formDescription.trim() || null,
+      });
+      setCategories((prev) =>
+        prev.map((c) => (c.id === editingCategory.id ? updated : c))
+      );
+      resetForm();
+      setEditingCategory(null);
+    } catch (err) {
+      console.error('Failed to update category:', err);
+      alert('Failed to update category. Please try again.');
+    }
   };
 
   const openEditModal = (category: TaskCategory) => {
@@ -90,20 +102,43 @@ export default function CategoriesPage() {
     setEditingCategory(category);
   };
 
-  const handleDeleteCategory = (categoryId: string) => {
-    setCategories((prev) => prev.filter((c) => c.id !== categoryId));
-    setDeleteConfirm(null);
+  const handleDeleteCategory = async (categoryId: string) => {
+    try {
+      await updateCategory(categoryId, { is_active: false });
+      setCategories((prev) => prev.filter((c) => c.id !== categoryId));
+      setDeleteConfirm(null);
+    } catch (err) {
+      console.error('Failed to delete category:', err);
+      alert('Failed to delete category. Please try again.');
+    }
   };
 
-  const handleToggleActive = (categoryId: string) => {
-    setCategories((prev) =>
-      prev.map((c) =>
-        c.id === categoryId ? { ...c, is_active: !c.is_active } : c
-      )
+  const handleToggleActive = async (categoryId: string) => {
+    const cat = categories.find((c) => c.id === categoryId);
+    if (!cat) return;
+
+    try {
+      const updated = await updateCategory(categoryId, { is_active: !cat.is_active });
+      setCategories((prev) =>
+        prev.map((c) => (c.id === categoryId ? updated : c))
+      );
+    } catch (err) {
+      console.error('Failed to toggle category status:', err);
+      alert('Failed to update category status. Please try again.');
+    }
+  };
+
+  if (loading || dataLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-12">
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </DashboardLayout>
     );
-  };
+  }
 
-  if (!user) return null;
+  if (!profile) return null;
 
   const categoryForm = (
     <>

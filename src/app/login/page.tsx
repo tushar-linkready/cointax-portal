@@ -3,67 +3,54 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Mail, Lock, LogIn, Eye, EyeOff } from 'lucide-react';
-import { demoLogin, getDemoUser, getDashboardPath } from '@/lib/auth';
-import { DEMO_ACCOUNTS } from '@/lib/mock-data';
+import { useAuth, getDashboardPath } from '@/lib/auth';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { signIn, profile, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
+  // If already logged in, redirect to dashboard
   useEffect(() => {
-    const user = getDemoUser();
-    if (user) {
-      router.replace(getDashboardPath(user.role));
+    if (!authLoading && profile) {
+      router.replace(getDashboardPath(profile.role));
     }
-  }, [router]);
+  }, [authLoading, profile, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
+    setSubmitting(true);
 
     try {
-      const profile = demoLogin(email, password);
-      if (profile) {
-        router.push(getDashboardPath(profile.role));
-      } else {
-        setError('Invalid email or password. Please try again.');
+      const err = await signIn(email, password);
+      if (err) {
+        setError(err);
+        setSubmitting(false);
       }
+      // On success, the AuthContext will update `profile`,
+      // and the useEffect above will handle redirection.
     } catch {
-      setError('An error occurred. Please try again.');
-    } finally {
-      setLoading(false);
+      setError('An unexpected error occurred. Please try again.');
+      setSubmitting(false);
     }
   };
 
-  const handleDemoLogin = (demoEmail: string, demoPassword: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-    setError('');
-    setLoading(true);
+  // Show nothing while checking existing session
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="h-8 w-8 border-4 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
-    const profile = demoLogin(demoEmail, demoPassword);
-    if (profile) {
-      router.push(getDashboardPath(profile.role));
-    } else {
-      setError('Demo login failed.');
-      setLoading(false);
-    }
-  };
-
-  const roleLabel = (role: string) => {
-    switch (role) {
-      case 'super_admin': return 'Super Admin';
-      case 'firm_admin': return 'Firm Admin';
-      case 'team_member': return 'Team Member';
-      case 'client': return 'Client';
-      default: return role;
-    }
-  };
+  // If profile exists the useEffect will redirect — avoid flash
+  if (profile) return null;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4 py-12">
@@ -131,15 +118,15 @@ export default function LoginPage() {
             {/* Sign In Button */}
             <button
               type="submit"
-              disabled={loading}
+              disabled={submitting}
               className="w-full flex items-center justify-center gap-2 bg-[#1e3a5f] text-white py-2.5 rounded-lg font-medium text-sm hover:bg-[#162d4a] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {loading ? (
+              {submitting ? (
                 <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
                 <LogIn className="h-4 w-4" />
               )}
-              {loading ? 'Signing in...' : 'Sign In'}
+              {submitting ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
 
@@ -150,34 +137,6 @@ export default function LoginPage() {
               Sign up
             </a>
           </p>
-        </div>
-
-        {/* Demo Accounts */}
-        <div className="mt-8 bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4 text-center">Demo Accounts</h3>
-          <div className="space-y-3">
-            {DEMO_ACCOUNTS.map((account) => (
-              <div
-                key={account.email}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-800 truncate">{account.name}</p>
-                  <p className="text-xs text-gray-500 truncate">{account.email}</p>
-                  <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-[#0d9488]/10 text-[#0d9488] font-medium">
-                    {roleLabel(account.role)}
-                  </span>
-                </div>
-                <button
-                  onClick={() => handleDemoLogin(account.email, account.password)}
-                  disabled={loading}
-                  className="ml-3 shrink-0 px-3 py-1.5 text-xs font-medium bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] transition-colors disabled:opacity-60"
-                >
-                  Login
-                </button>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </div>

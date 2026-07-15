@@ -10,34 +10,63 @@ import { RecentTasks } from '@/components/dashboard/RecentTasks';
 import { TaskChart } from '@/components/dashboard/TaskChart';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { getDemoUser } from '@/lib/auth';
-import { mockClients, getEnrichedTasks } from '@/lib/mock-data';
+import { useAuth } from '@/lib/auth';
+import { getFirmDashboardStats, getTasks } from '@/lib/services';
 import { isOverdue } from '@/lib/utils';
-import type { Profile, Task } from '@/lib/types';
+import type { Task } from '@/lib/types';
 
 export default function FirmDashboardPage() {
   const router = useRouter();
-  const [user, setUser] = useState<Profile | null>(null);
+  const { profile, loading, firmId } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [clientCount, setClientCount] = useState(0);
+  const [stats, setStats] = useState({
+    totalClients: 0,
+    totalTasks: 0,
+    pendingApprovals: 0,
+    inProgress: 0,
+    overdue: 0,
+    completedThisMonth: 0,
+    totalOutstanding: 0,
+    totalOverdue: 0,
+    paidThisMonth: 0,
+  });
+  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
-    const currentUser = getDemoUser();
-    if (!currentUser) {
+    if (loading) return;
+    if (!profile) {
       router.push('/login');
       return;
     }
-    setUser(currentUser);
 
-    const firmId = currentUser.firm_id;
-    const firmTasks = getEnrichedTasks(firmId ?? undefined);
-    setTasks(firmTasks);
+    const loadData = async () => {
+      try {
+        const [dashStats, firmTasks] = await Promise.all([
+          getFirmDashboardStats(firmId!),
+          getTasks(firmId!),
+        ]);
+        setStats(dashStats);
+        setTasks(firmTasks);
+      } catch (err) {
+        console.error('Failed to load dashboard data:', err);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    loadData();
+  }, [profile, loading, firmId, router]);
 
-    const firmClients = mockClients.filter((c) => c.firm_id === firmId);
-    setClientCount(firmClients.length);
-  }, [router]);
+  if (loading || dataLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-12">
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
-  if (!user) {
+  if (!profile) {
     return null;
   }
 
@@ -58,7 +87,7 @@ export default function FirmDashboardPage() {
         <div>
           <h1 className="text-2xl font-bold text-navy-900">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {user.full_name}&apos;s Firm Overview
+            {profile.full_name}&apos;s Firm Overview
           </p>
         </div>
 
@@ -66,7 +95,7 @@ export default function FirmDashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatsCard
             title="Total Clients"
-            value={clientCount}
+            value={stats.totalClients}
             icon={Users}
             color="text-teal-600"
           />

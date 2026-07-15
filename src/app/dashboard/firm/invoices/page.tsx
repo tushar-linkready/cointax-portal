@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Search, Eye, IndianRupee, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react';
+import { Plus, Search, Eye, IndianRupee, AlertTriangle, Clock, CheckCircle2, Mail, MessageCircle } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -11,11 +11,11 @@ import { Select } from '@/components/ui/Select';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
-import { getDemoUser } from '@/lib/auth';
-import { getEnrichedInvoices, mockInvoices } from '@/lib/mock-data';
+import { useAuth } from '@/lib/auth';
+import { getInvoices, updateInvoice } from '@/lib/services';
 import { INVOICE_STATUS_CONFIG, ALL_INVOICE_STATUSES } from '@/lib/constants';
 import { formatDate, formatCurrency } from '@/lib/utils';
-import type { Profile, Invoice, InvoiceStatus } from '@/lib/types';
+import type { Invoice, InvoiceStatus } from '@/lib/types';
 
 function getStatusBadgeVariant(status: InvoiceStatus) {
   const map: Record<InvoiceStatus, 'default' | 'info' | 'success' | 'danger' | 'warning'> = {
@@ -28,25 +28,92 @@ function getStatusBadgeVariant(status: InvoiceStatus) {
   return map[status];
 }
 
+function generateInvoiceEmailBody(inv: Invoice): string {
+  const itemsList = inv.items
+    .map((item, i) => `${i + 1}. ${item.description} — Qty: ${item.quantity}, Rate: ${formatCurrency(item.rate)}, Amount: ${formatCurrency(item.amount)}`)
+    .join('\n');
+
+  return `Dear ${inv.client?.name ?? 'Client'},
+
+Please find below the details for Invoice ${inv.invoice_number}:
+
+${itemsList}
+
+Subtotal: ${formatCurrency(inv.subtotal)}
+GST @ ${inv.gst_rate}%: ${formatCurrency(inv.gst_amount)}
+Total: ${formatCurrency(inv.total)}
+
+Due Date: ${formatDate(inv.due_date)}
+${inv.notes ? `\nNotes: ${inv.notes}` : ''}
+
+Please make the payment by the due date. For any queries, feel free to reach out.
+
+Regards,
+Cointax Financial Services LLP`;
+}
+
+function generateWhatsAppMessage(inv: Invoice): string {
+  const itemsList = inv.items
+    .map((item, i) => `${i + 1}. ${item.description} — ${formatCurrency(item.amount)}`)
+    .join('\n');
+
+  return `Hi ${inv.client?.name ?? ''},
+
+Here is your invoice from *Cointax Financial Services LLP*:
+
+*Invoice:* ${inv.invoice_number}
+*Due Date:* ${formatDate(inv.due_date)}
+
+${itemsList}
+
+*Total: ${formatCurrency(inv.total)}* (incl. GST @ ${inv.gst_rate}%)
+${inv.notes ? `\n_${inv.notes}_` : ''}
+
+Please make the payment by the due date. Thank you!`;
+}
+
+function openEmailForInvoice(inv: Invoice) {
+  const subject = encodeURIComponent(`Invoice ${inv.invoice_number} — Cointax Financial Services LLP`);
+  const body = encodeURIComponent(generateInvoiceEmailBody(inv));
+  const to = inv.client?.email ?? '';
+  window.open(`mailto:${to}?subject=${subject}&body=${body}`, '_blank');
+}
+
+function openWhatsAppForInvoice(inv: Invoice) {
+  const phone = (inv.client?.phone ?? '').replace(/[\s\-\+]/g, '');
+  const message = encodeURIComponent(generateWhatsAppMessage(inv));
+  window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+}
+
 export default function FirmInvoicesPage() {
   const router = useRouter();
-  const [user, setUser] = useState<Profile | null>(null);
+  const { profile, loading, firmId } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
-    const currentUser = getDemoUser();
-    if (!currentUser) {
+    if (loading) return;
+    if (!profile) {
       router.push('/login');
       return;
     }
-    setUser(currentUser);
-    const firmInvoices = getEnrichedInvoices(currentUser.firm_id ?? undefined);
-    setInvoices(firmInvoices);
-  }, [router]);
+
+    const loadData = async () => {
+      try {
+        const firmInvoices = await getInvoices(firmId!);
+        setInvoices(firmInvoices);
+      } catch (err) {
+        console.error('Failed to load invoices:', err);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    loadData();
+  }, [profile, loading, firmId, router]);
 
   const filteredInvoices = useMemo(() => {
     return invoices.filter((inv) => {
@@ -96,7 +163,28 @@ export default function FirmInvoicesPage() {
     setIsModalOpen(true);
   };
 
-  if (!user) return null;
+  const handleStatusUpdate = async (invoiceId: string, newStatus: InvoiceStatus, extraFields?: Partial<Invoice>) => {
+    try {
+      const updated = await updateInvoice(invoiceId, { status: newStatus, ...extraFields });
+      setInvoices((prev) => prev.map((i) => (i.id === invoiceId ? updated : i)));
+      setSelectedInvoice((prev) => (prev && prev.id === invoiceId ? updated : prev));
+    } catch (err) {
+      console.error('Failed to update invoice:', err);
+      alert('Failed to update invoice. Please try again.');
+    }
+  };
+
+  if (loading || dataLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-12">
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!profile) return null;
 
   return (
     <DashboardLayout>
@@ -339,16 +427,42 @@ export default function FirmInvoicesPage() {
                 </div>
               )}
 
+              {/* Send buttons */}
+              {selectedInvoice.status !== 'cancelled' && (
+                <div className="border-t border-gray-200 pt-4">
+                  <p className="text-xs font-medium text-gray-500 mb-2">Send Invoice</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {selectedInvoice.client?.email && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEmailForInvoice(selectedInvoice)}
+                      >
+                        <Mail className="w-4 h-4 mr-1" />
+                        Send Email
+                      </Button>
+                    )}
+                    {selectedInvoice.client?.phone && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openWhatsAppForInvoice(selectedInvoice)}
+                      >
+                        <MessageCircle className="w-4 h-4 mr-1" />
+                        Send WhatsApp
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Status update buttons */}
               <div className="flex gap-2 flex-wrap pt-2">
                 {selectedInvoice.status === 'draft' && (
                   <Button
                     variant="primary"
                     size="sm"
-                    onClick={() => {
-                      setInvoices(prev => prev.map(i => i.id === selectedInvoice.id ? { ...i, status: 'sent' as const } : i));
-                      setSelectedInvoice(prev => prev ? { ...prev, status: 'sent' as const } : null);
-                    }}
+                    onClick={() => handleStatusUpdate(selectedInvoice.id, 'sent')}
                   >
                     Mark as Sent
                   </Button>
@@ -359,8 +473,7 @@ export default function FirmInvoicesPage() {
                     size="sm"
                     onClick={() => {
                       const today = new Date().toISOString().split('T')[0];
-                      setInvoices(prev => prev.map(i => i.id === selectedInvoice.id ? { ...i, status: 'paid' as const, paid_date: today } : i));
-                      setSelectedInvoice(prev => prev ? { ...prev, status: 'paid' as const, paid_date: today } : null);
+                      handleStatusUpdate(selectedInvoice.id, 'paid', { paid_date: today });
                     }}
                   >
                     Mark as Paid
@@ -370,10 +483,7 @@ export default function FirmInvoicesPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      setInvoices(prev => prev.map(i => i.id === selectedInvoice.id ? { ...i, status: 'cancelled' as const } : i));
-                      setSelectedInvoice(prev => prev ? { ...prev, status: 'cancelled' as const } : null);
-                    }}
+                    onClick={() => handleStatusUpdate(selectedInvoice.id, 'cancelled')}
                   >
                     Cancel Invoice
                   </Button>

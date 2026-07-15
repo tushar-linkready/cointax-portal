@@ -9,19 +9,10 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
-import { getDemoUser } from '@/lib/auth';
-import { mockClients, mockInvoices } from '@/lib/mock-data';
+import { useAuth } from '@/lib/auth';
+import { getClients, getNextInvoiceNumber, createInvoice } from '@/lib/services';
 import { formatCurrency } from '@/lib/utils';
-import type { Profile, InvoiceItem } from '@/lib/types';
-
-function generateInvoiceNumber(): string {
-  const year = new Date().getFullYear();
-  const existingCount = mockInvoices.filter((i) =>
-    i.invoice_number.startsWith(`CTX-${year}`)
-  ).length;
-  const nextNum = String(existingCount + 1).padStart(3, '0');
-  return `CTX-${year}-${nextNum}`;
-}
+import type { Client, InvoiceItem } from '@/lib/types';
 
 const EMPTY_ITEM: InvoiceItem = {
   description: '',
@@ -32,7 +23,8 @@ const EMPTY_ITEM: InvoiceItem = {
 
 export default function NewInvoicePage() {
   const router = useRouter();
-  const [user, setUser] = useState<Profile | null>(null);
+  const { profile, loading, firmId } = useAuth();
+  const [firmClients, setFirmClients] = useState<Client[]>([]);
   const [clientId, setClientId] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [items, setItems] = useState<InvoiceItem[]>([{ ...EMPTY_ITEM }]);
@@ -40,25 +32,49 @@ export default function NewInvoicePage() {
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
-    const currentUser = getDemoUser();
-    if (!currentUser) {
+    if (loading) return;
+    if (!profile) {
       router.push('/login');
       return;
     }
-    setUser(currentUser);
-    setInvoiceNumber(generateInvoiceNumber());
 
-    // Default due date: 15 days from now
-    const defaultDue = new Date();
-    defaultDue.setDate(defaultDue.getDate() + 15);
-    setDueDate(defaultDue.toISOString().split('T')[0]);
-  }, [router]);
+    const loadData = async () => {
+      try {
+        const [clients, nextNumber] = await Promise.all([
+          getClients(firmId!),
+          getNextInvoiceNumber(firmId!),
+        ]);
+        setFirmClients(clients);
+        setInvoiceNumber(nextNumber);
 
-  if (!user) return null;
+        // Default due date: 15 days from now
+        const defaultDue = new Date();
+        defaultDue.setDate(defaultDue.getDate() + 15);
+        setDueDate(defaultDue.toISOString().split('T')[0]);
+      } catch (err) {
+        console.error('Failed to load form data:', err);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    loadData();
+  }, [profile, loading, firmId, router]);
 
-  const firmClients = mockClients.filter((c) => c.firm_id === user.firm_id);
+  if (loading || dataLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-12">
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!profile) return null;
+
   const clientOptions = [
     { value: '', label: 'Select a client' },
     ...firmClients.map((c) => ({
@@ -101,7 +117,7 @@ export default function NewInvoicePage() {
   const gstAmount = Math.round((subtotal * gstRate) / 100);
   const total = subtotal + gstAmount;
 
-  const handleSave = (sendAfterSave: boolean) => {
+  const handleSave = async (sendAfterSave: boolean) => {
     if (!clientId) {
       alert('Please select a client.');
       return;
@@ -113,11 +129,33 @@ export default function NewInvoicePage() {
 
     setIsSaving(true);
 
-    // Simulate save (demo mode)
-    setTimeout(() => {
-      setIsSaving(false);
+    try {
+      await createInvoice({
+        firm_id: firmId!,
+        client_id: clientId,
+        invoice_number: invoiceNumber,
+        items: items.filter(i => i.description.trim() && i.amount > 0),
+        subtotal,
+        gst_rate: gstRate,
+        gst_amount: gstAmount,
+        total,
+        status: sendAfterSave ? 'sent' : 'draft',
+        due_date: dueDate,
+        notes: notes || null,
+        created_by: profile!.id,
+      });
+
+      if (sendAfterSave) {
+        const client = firmClients.find(c => c.id === clientId);
+        alert(`Invoice ${invoiceNumber} saved and marked as Sent to ${client?.name ?? 'client'}.\n\nNote: Email delivery will be available once backend integration is complete.`);
+      }
       router.push('/dashboard/firm/invoices');
-    }, 500);
+    } catch (err) {
+      console.error('Failed to create invoice:', err);
+      alert('Failed to create invoice. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (

@@ -11,32 +11,41 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
-import { getDemoUser } from '@/lib/auth';
-import { getEnrichedTasks } from '@/lib/mock-data';
+import { useAuth } from '@/lib/auth';
+import { getTasks, updateTask } from '@/lib/services';
 import { ALL_STATUSES, ALL_PRIORITIES } from '@/lib/constants';
-import type { Profile, Task, TaskStatus, TaskPriority } from '@/lib/types';
+import type { Task, TaskStatus, TaskPriority } from '@/lib/types';
 
 export default function FirmTasksPage() {
   const router = useRouter();
-  const [user, setUser] = useState<Profile | null>(null);
+  const { profile, loading, firmId } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
-    const currentUser = getDemoUser();
-    if (!currentUser) {
+    if (loading) return;
+    if (!profile) {
       router.push('/login');
       return;
     }
-    setUser(currentUser);
 
-    const firmTasks = getEnrichedTasks(currentUser.firm_id ?? undefined);
-    setTasks(firmTasks);
-  }, [router]);
+    const loadData = async () => {
+      try {
+        const firmTasks = await getTasks(firmId!);
+        setTasks(firmTasks);
+      } catch (err) {
+        console.error('Failed to load tasks:', err);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    loadData();
+  }, [profile, loading, firmId, router]);
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
@@ -63,12 +72,18 @@ export default function FirmTasksPage() {
     setIsModalOpen(true);
   };
 
-  const handleStatusChange = (taskId: string, newStatus: TaskStatus) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
-    );
-    if (selectedTask && selectedTask.id === taskId) {
-      setSelectedTask((prev) => (prev ? { ...prev, status: newStatus } : null));
+  const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
+    try {
+      await updateTask(taskId, { status: newStatus });
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
+      );
+      if (selectedTask && selectedTask.id === taskId) {
+        setSelectedTask((prev) => (prev ? { ...prev, status: newStatus } : null));
+      }
+    } catch (err) {
+      console.error('Failed to update task status:', err);
+      alert('Failed to update task status. Please try again.');
     }
   };
 
@@ -96,7 +111,17 @@ export default function FirmTasksPage() {
     })),
   ];
 
-  if (!user) {
+  if (loading || dataLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-12">
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!profile) {
     return null;
   }
 

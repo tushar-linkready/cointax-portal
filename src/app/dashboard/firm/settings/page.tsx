@@ -9,9 +9,9 @@ import { Textarea } from '@/components/ui/Textarea';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
-import { getDemoUser } from '@/lib/auth';
-import { mockFirms } from '@/lib/mock-data';
-import type { Profile, Firm } from '@/lib/types';
+import { useAuth } from '@/lib/auth';
+import { getFirm, updateFirm } from '@/lib/services';
+import type { Firm } from '@/lib/types';
 import {
   Settings,
   Check,
@@ -58,11 +58,12 @@ const PLAN_LABELS: Record<string, string> = {
 
 export default function SettingsPage() {
   const router = useRouter();
-  const [user, setUser] = useState<Profile | null>(null);
+  const { profile, loading, firmId } = useAuth();
   const [firm, setFirm] = useState<Firm | null>(null);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [isDeactivateModalOpen, setIsDeactivateModalOpen] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -71,46 +72,75 @@ export default function SettingsPage() {
   const [formAddress, setFormAddress] = useState('');
 
   useEffect(() => {
-    const currentUser = getDemoUser();
-    if (!currentUser) {
+    if (loading) return;
+    if (!profile) {
       router.push('/login');
       return;
     }
-    setUser(currentUser);
-    const userFirm = mockFirms.find((f) => f.id === currentUser.firm_id);
-    if (userFirm) {
-      setFirm(userFirm);
-      setFormName(userFirm.name);
-      setFormEmail(userFirm.email);
-      setFormPhone(userFirm.phone ?? '');
-      setFormAddress(userFirm.address ?? '');
-    }
-  }, [router]);
 
-  const handleSaveSettings = (e: React.FormEvent) => {
+    const loadData = async () => {
+      try {
+        const firmData = await getFirm(firmId!);
+        if (firmData) {
+          setFirm(firmData);
+          setFormName(firmData.name);
+          setFormEmail(firmData.email);
+          setFormPhone(firmData.phone ?? '');
+          setFormAddress(firmData.address ?? '');
+        }
+      } catch (err) {
+        console.error('Failed to load firm data:', err);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    loadData();
+  }, [profile, loading, firmId, router]);
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firm) return;
 
-    setFirm({
-      ...firm,
-      name: formName.trim(),
-      email: formEmail.trim(),
-      phone: formPhone.trim() || null,
-      address: formAddress.trim() || null,
-      updated_at: new Date().toISOString(),
-    });
-
-    setShowSaveSuccess(true);
-    setTimeout(() => setShowSaveSuccess(false), 3000);
+    try {
+      const updated = await updateFirm(firmId!, {
+        name: formName.trim(),
+        email: formEmail.trim(),
+        phone: formPhone.trim() || null,
+        address: formAddress.trim() || null,
+      });
+      setFirm(updated);
+      setShowSaveSuccess(true);
+      setTimeout(() => setShowSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error('Failed to save settings:', err);
+      alert('Failed to save settings. Please try again.');
+    }
   };
 
-  const handleDeactivate = () => {
+  const handleDeactivate = async () => {
     if (!firm) return;
-    setFirm({ ...firm, is_active: false });
-    setIsDeactivateModalOpen(false);
+
+    try {
+      const updated = await updateFirm(firmId!, { is_active: false });
+      setFirm(updated);
+      setIsDeactivateModalOpen(false);
+    } catch (err) {
+      console.error('Failed to deactivate firm:', err);
+      alert('Failed to deactivate firm. Please try again.');
+    }
   };
 
-  if (!user || !firm) return null;
+  if (loading || dataLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-12">
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!profile || !firm) return null;
 
   const planFeatures = PLAN_FEATURES[firm.plan] ?? PLAN_FEATURES.starter;
 

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -15,9 +16,11 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/Table';
-import { mockFirms, mockClients } from '@/lib/mock-data';
+import { useAuth } from '@/lib/auth';
+import { getFirms, getAllClients, updateFirm } from '@/lib/services';
+import { supabase } from '@/lib/supabase';
 import { formatDate } from '@/lib/utils';
-import { Firm, FirmPlan } from '@/lib/types';
+import { Firm, FirmPlan, Client } from '@/lib/types';
 import { Plus, Search } from 'lucide-react';
 
 const PLAN_OPTIONS = [
@@ -41,7 +44,10 @@ function slugify(text: string): string {
 }
 
 export default function FirmsPage() {
-  const [firms, setFirms] = useState<Firm[]>([...mockFirms]);
+  const router = useRouter();
+  const { profile, loading } = useAuth();
+  const [firms, setFirms] = useState<Firm[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -50,6 +56,25 @@ export default function FirmsPage() {
   const [formEmail, setFormEmail] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formPlan, setFormPlan] = useState<FirmPlan>('starter');
+
+  useEffect(() => {
+    if (loading) return;
+    if (!profile) { router.push('/login'); return; }
+
+    const fetchData = async () => {
+      try {
+        const [firmsData, clientsData] = await Promise.all([
+          getFirms(),
+          getAllClients(),
+        ]);
+        setFirms(firmsData);
+        setClients(clientsData);
+      } catch (err) {
+        console.error('Error fetching firms data:', err);
+      }
+    };
+    fetchData();
+  }, [profile, loading, router]);
 
   const filteredFirms = useMemo(() => {
     if (!searchQuery.trim()) return firms;
@@ -63,36 +88,48 @@ export default function FirmsPage() {
   }, [firms, searchQuery]);
 
   const getClientCount = (firmId: string) => {
-    return mockClients.filter((c) => c.firm_id === firmId).length;
+    return clients.filter((c) => c.firm_id === firmId).length;
   };
 
-  const handleToggleStatus = (firmId: string) => {
-    setFirms((prev) =>
-      prev.map((f) => (f.id === firmId ? { ...f, is_active: !f.is_active } : f))
-    );
+  const handleToggleStatus = async (firmId: string) => {
+    const firm = firms.find((f) => f.id === firmId);
+    if (!firm) return;
+    try {
+      await updateFirm(firmId, { is_active: !firm.is_active });
+      setFirms((prev) =>
+        prev.map((f) => (f.id === firmId ? { ...f, is_active: !f.is_active } : f))
+      );
+    } catch (err) {
+      console.error('Error toggling firm status:', err);
+    }
   };
 
-  const handleAddFirm = (e: React.FormEvent) => {
+  const handleAddFirm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formEmail.trim()) return;
 
-    const newFirm: Firm = {
-      id: `firm-${Date.now()}`,
-      name: formName.trim(),
-      slug: slugify(formName),
-      email: formEmail.trim(),
-      phone: formPhone.trim() || null,
-      plan: formPlan,
-      is_active: true,
-      logo_url: null,
-      address: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+    try {
+      const slug = slugify(formName) + '-' + Date.now().toString(36);
+      const { data, error } = await supabase
+        .from('firms')
+        .insert({
+          name: formName.trim(),
+          slug,
+          email: formEmail.trim(),
+          phone: formPhone.trim() || null,
+          plan: formPlan,
+          is_active: true,
+        })
+        .select()
+        .single();
 
-    setFirms((prev) => [newFirm, ...prev]);
-    resetForm();
-    setIsModalOpen(false);
+      if (error) throw error;
+      setFirms((prev) => [data, ...prev]);
+      resetForm();
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error('Error adding firm:', err);
+    }
   };
 
   const resetForm = () => {
@@ -101,6 +138,8 @@ export default function FirmsPage() {
     setFormPhone('');
     setFormPlan('starter');
   };
+
+  if (loading || !profile) return null;
 
   return (
     <DashboardLayout>

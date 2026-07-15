@@ -8,10 +8,10 @@ import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Card, CardContent } from '@/components/ui/Card';
-import { getDemoUser } from '@/lib/auth';
-import { mockProfiles, mockTasks } from '@/lib/mock-data';
+import { useAuth } from '@/lib/auth';
+import { getProfiles, getTasks } from '@/lib/services';
 import { getInitials } from '@/lib/utils';
-import type { Profile } from '@/lib/types';
+import type { Profile, Task } from '@/lib/types';
 import { Plus, UserCog, Mail, Phone, ClipboardList } from 'lucide-react';
 
 const ROLE_BADGE_VARIANT: Record<string, 'primary' | 'secondary' | 'default'> = {
@@ -26,9 +26,11 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default function TeamPage() {
   const router = useRouter();
-  const [user, setUser] = useState<Profile | null>(null);
+  const { profile, loading, firmId } = useAuth();
   const [team, setTeam] = useState<Profile[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -36,22 +38,34 @@ export default function TeamPage() {
   const [formPhone, setFormPhone] = useState('');
 
   useEffect(() => {
-    const currentUser = getDemoUser();
-    if (!currentUser) {
+    if (loading) return;
+    if (!profile) {
       router.push('/login');
       return;
     }
-    setUser(currentUser);
-    const firmTeam = mockProfiles.filter(
-      (p) =>
-        p.firm_id === currentUser.firm_id &&
-        (p.role === 'team_member' || p.role === 'firm_admin')
-    );
-    setTeam(firmTeam);
-  }, [router]);
+
+    const loadData = async () => {
+      try {
+        const [profiles, firmTasks] = await Promise.all([
+          getProfiles(firmId!),
+          getTasks(firmId!),
+        ]);
+        const firmTeam = profiles.filter(
+          (p) => p.role === 'team_member' || p.role === 'firm_admin'
+        );
+        setTeam(firmTeam);
+        setTasks(firmTasks);
+      } catch (err) {
+        console.error('Failed to load team data:', err);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    loadData();
+  }, [profile, loading, firmId, router]);
 
   const getTaskCount = (userId: string) => {
-    return mockTasks.filter(
+    return tasks.filter(
       (t) => t.assignee_id === userId && t.status !== 'completed'
     ).length;
   };
@@ -66,9 +80,10 @@ export default function TeamPage() {
     e.preventDefault();
     if (!formName.trim() || !formEmail.trim()) return;
 
+    // Note: actual invite flow would send an invitation email via backend
     const newMember: Profile = {
       id: `user-${Date.now()}`,
-      firm_id: user?.firm_id ?? null,
+      firm_id: firmId ?? null,
       full_name: formName.trim(),
       email: formEmail.trim(),
       role: 'team_member',
@@ -84,7 +99,17 @@ export default function TeamPage() {
     setIsModalOpen(false);
   };
 
-  if (!user) return null;
+  if (loading || dataLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-12">
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!profile) return null;
 
   return (
     <DashboardLayout>

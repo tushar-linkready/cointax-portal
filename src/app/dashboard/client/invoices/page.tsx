@@ -7,11 +7,12 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
-import { getDemoUser } from '@/lib/auth';
-import { getClientInvoices, mockClients } from '@/lib/mock-data';
+import { useAuth } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
+import { getClientInvoices } from '@/lib/services';
 import { INVOICE_STATUS_CONFIG } from '@/lib/constants';
 import { formatDate, formatCurrency } from '@/lib/utils';
-import type { Profile, Invoice, InvoiceStatus } from '@/lib/types';
+import type { Invoice, InvoiceStatus } from '@/lib/types';
 
 function getStatusBadgeVariant(status: InvoiceStatus) {
   const map: Record<InvoiceStatus, 'default' | 'info' | 'success' | 'danger' | 'warning'> = {
@@ -26,29 +27,35 @@ function getStatusBadgeVariant(status: InvoiceStatus) {
 
 export default function ClientInvoicesPage() {
   const router = useRouter();
-  const [user, setUser] = useState<Profile | null>(null);
+  const { profile, loading } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    const currentUser = getDemoUser();
-    if (!currentUser) {
-      router.push('/login');
-      return;
-    }
-    setUser(currentUser);
+    if (loading) return;
+    if (!profile) { router.push('/login'); return; }
 
-    // Find client record linked to this user
-    const clientRecord = mockClients.find(
-      (c) => c.email === currentUser.email || c.name === currentUser.full_name
-    );
-    if (clientRecord) {
-      const clientInvoices = getClientInvoices(clientRecord.id);
-      // Clients should not see draft invoices
-      setInvoices(clientInvoices.filter((i) => i.status !== 'draft'));
-    }
-  }, [router]);
+    const fetchData = async () => {
+      try {
+        // Find client record linked to this user by email
+        const { data: clients } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('email', profile.email)
+          .limit(1);
+        const clientRecord = clients?.[0];
+        if (clientRecord) {
+          // getClientInvoices already filters out drafts
+          const clientInvoices = await getClientInvoices(clientRecord.id);
+          setInvoices(clientInvoices);
+        }
+      } catch (err) {
+        console.error('Error fetching invoices:', err);
+      }
+    };
+    fetchData();
+  }, [profile, loading, router]);
 
   const totalOutstanding = useMemo(() => {
     return invoices
@@ -61,7 +68,7 @@ export default function ClientInvoicesPage() {
     setIsModalOpen(true);
   };
 
-  if (!user) return null;
+  if (loading || !profile) return null;
 
   return (
     <DashboardLayout>

@@ -9,40 +9,43 @@ import { TaskCard } from '@/components/tasks/TaskCard';
 import { TaskDetail } from '@/components/tasks/TaskDetail';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
-import { getDemoUser } from '@/lib/auth';
-import { getEnrichedTasks, mockClients } from '@/lib/mock-data';
+import { useAuth } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
+import { getClientTasks } from '@/lib/services';
 import { STATUS_CONFIG, ALL_STATUSES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
-import type { Profile, Task, TaskStatus } from '@/lib/types';
+import type { Task, TaskStatus } from '@/lib/types';
 
 export default function ClientTasksPage() {
   const router = useRouter();
-  const [user, setUser] = useState<Profile | null>(null);
+  const { profile, loading } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all');
 
   useEffect(() => {
-    const currentUser = getDemoUser();
-    if (!currentUser) {
-      router.push('/login');
-      return;
-    }
-    if (currentUser.role !== 'client') {
-      router.push('/login');
-      return;
-    }
-    setUser(currentUser);
+    if (loading) return;
+    if (!profile) { router.push('/login'); return; }
+    if (profile.role !== 'client') { router.push('/login'); return; }
 
-    const client = mockClients.find(
-      (c) => c.email === currentUser.email && c.firm_id === currentUser.firm_id
-    );
-    if (!client) return;
+    const fetchData = async () => {
+      try {
+        const { data: clients } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('email', profile.email)
+          .limit(1);
+        const client = clients?.[0];
+        if (!client) return;
 
-    const allTasks = getEnrichedTasks(currentUser.firm_id ?? undefined);
-    const clientTasks = allTasks.filter((t) => t.client_id === client.id);
-    setTasks(clientTasks);
-  }, [router]);
+        const clientTasks = await getClientTasks(client.id);
+        setTasks(clientTasks);
+      } catch (err) {
+        console.error('Error fetching client tasks:', err);
+      }
+    };
+    fetchData();
+  }, [profile, loading, router]);
 
   const filteredTasks = useMemo(() => {
     if (statusFilter === 'all') return tasks;
@@ -58,7 +61,7 @@ export default function ClientTasksPage() {
     return counts;
   }, [tasks]);
 
-  if (!user) {
+  if (loading || !profile) {
     return null;
   }
 
