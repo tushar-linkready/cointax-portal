@@ -11,11 +11,11 @@ export default function DashboardRedirectPage() {
   useEffect(() => {
     if (loading) return;
     if (profile) {
-      router.replace(getDashboardPath(profile.role));
+      window.location.href = getDashboardPath(profile.role);
     } else {
-      router.replace('/login');
+      window.location.href = '/login';
     }
-  }, [profile, loading, router]);
+  }, [profile, loading]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">

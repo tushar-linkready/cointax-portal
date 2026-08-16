@@ -35,7 +35,7 @@ export default function FirmDashboardPage() {
   useEffect(() => {
     if (loading) return;
     if (!profile) {
-      router.push('/login');
+      window.location.href = '/login';
       return;
     }
 

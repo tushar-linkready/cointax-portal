@@ -17,9 +17,9 @@ export default function LoginPage() {
   // If already logged in, redirect to dashboard
   useEffect(() => {
     if (!authLoading && profile) {
-      router.replace(getDashboardPath(profile.role));
+      window.location.href = getDashboardPath(profile.role);
     }
-  }, [authLoading, profile, router]);
+  }, [authLoading, profile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

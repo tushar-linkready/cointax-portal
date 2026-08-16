@@ -1,7 +1,6 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import type { Profile, UserRole } from '@/lib/types';
 import type { User, Session } from '@supabase/supabase-js';
@@ -41,7 +40,6 @@ export interface SignUpData {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const router = useRouter();
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -113,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: input.email,
       password: input.password,
       options: {
-        data: { full_name: input.fullName }, // stored in auth.users.raw_user_meta_data
+        data: { full_name: input.fullName },
       },
     });
     if (authError) return authError.message;
@@ -169,8 +167,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setAuthUser(null);
     setProfile(null);
-    router.push('/login');
-  }, [router]);
+    window.location.href = '/login';
+  }, []);
 
   return (
     <AuthContext.Provider
