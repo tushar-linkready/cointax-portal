@@ -2,25 +2,9 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // Public routes — no auth needed
-  const publicRoutes = ['/', '/login', '/signup'];
-  if (publicRoutes.includes(pathname)) {
-    return NextResponse.next();
-  }
-
-  // Check for Supabase auth cookies.
-  // supabase-js stores the session in cookies prefixed with 'sb-'.
-  // The exact cookie name pattern is sb-<project-ref>-auth-token.
-  const hasAuthCookie = request.cookies.getAll().some(
-    (c) => c.name.startsWith('sb-') && c.name.endsWith('-auth-token')
-  );
-
-  if (!hasAuthCookie && pathname.startsWith('/dashboard')) {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
-
+  // Supabase JS v2 stores auth sessions in localStorage (browser-only),
+  // NOT in cookies. So we cannot check auth state in middleware.
+  // Each page handles its own auth guard via the useAuth() hook.
   return NextResponse.next();
 }
 
