@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Textarea } from '@/components/ui/Textarea';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { useAuth } from '@/lib/auth';
+import { useToast } from '@/components/ui/Toast';
 import { getCategories, createCategory, updateCategory } from '@/lib/services';
 import type { TaskCategory } from '@/lib/types';
 import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
@@ -17,6 +18,7 @@ import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
 export default function CategoriesPage() {
   const router = useRouter();
   const { profile, loading, firmId } = useAuth();
+  const { showToast } = useToast();
   const [categories, setCategories] = useState<TaskCategory[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<TaskCategory | null>(null);
@@ -31,6 +33,10 @@ export default function CategoriesPage() {
     if (loading) return;
     if (!profile) {
       router.push('/login');
+      return;
+    }
+    if (profile.role === 'client') {
+      window.location.href = '/dashboard/client';
       return;
     }
 
@@ -72,7 +78,7 @@ export default function CategoriesPage() {
       setIsAddModalOpen(false);
     } catch (err) {
       console.error('Failed to create category:', err);
-      alert('Failed to create category. Please try again.');
+      showToast('Failed to create category. Please try again.', 'error');
     }
   };
 
@@ -92,7 +98,7 @@ export default function CategoriesPage() {
       setEditingCategory(null);
     } catch (err) {
       console.error('Failed to update category:', err);
-      alert('Failed to update category. Please try again.');
+      showToast('Failed to update category. Please try again.', 'error');
     }
   };
 
@@ -109,7 +115,7 @@ export default function CategoriesPage() {
       setDeleteConfirm(null);
     } catch (err) {
       console.error('Failed to delete category:', err);
-      alert('Failed to delete category. Please try again.');
+      showToast('Failed to delete category. Please try again.', 'error');
     }
   };
 
@@ -124,7 +130,7 @@ export default function CategoriesPage() {
       );
     } catch (err) {
       console.error('Failed to toggle category status:', err);
-      alert('Failed to update category status. Please try again.');
+      showToast('Failed to update category status. Please try again.', 'error');
     }
   };
 

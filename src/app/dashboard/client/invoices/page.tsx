@@ -7,7 +7,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
-import { useAuth } from '@/lib/auth';
+import { useAuth, getDashboardPath } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { getClientInvoices } from '@/lib/services';
 import { INVOICE_STATUS_CONFIG } from '@/lib/constants';
@@ -35,6 +35,10 @@ export default function ClientInvoicesPage() {
   useEffect(() => {
     if (loading) return;
     if (!profile) { router.push('/login'); return; }
+    if (profile.role !== 'client') {
+      window.location.href = getDashboardPath(profile.role);
+      return;
+    }
 
     const fetchData = async () => {
       try {

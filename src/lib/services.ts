@@ -404,6 +404,41 @@ export async function getSuperAdminStats() {
 }
 
 // ============================================================
+// Team Invite
+// ============================================================
+
+export async function inviteTeamMember(member: {
+  firm_id: string;
+  full_name: string;
+  email: string;
+  phone?: string | null;
+  role: 'team_member';
+}): Promise<Profile> {
+  const id = crypto.randomUUID();
+  const { data, error } = await supabase
+    .from('profiles')
+    .insert({ id, ...member, is_active: true })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ============================================================
+// Create Notification
+// ============================================================
+
+export async function createNotification(notif: {
+  user_id: string;
+  firm_id?: string | null;
+  title: string;
+  message: string;
+  link?: string | null;
+}): Promise<void> {
+  await supabase.from('notifications').insert(notif);
+}
+
+// ============================================================
 // Invoice number generation
 // ============================================================
 

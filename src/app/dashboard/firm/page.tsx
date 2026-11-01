@@ -38,6 +38,10 @@ export default function FirmDashboardPage() {
       window.location.href = '/login';
       return;
     }
+    if (profile.role === 'client') {
+      window.location.href = '/dashboard/client';
+      return;
+    }
 
     const loadData = async () => {
       try {

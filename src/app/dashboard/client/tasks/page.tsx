@@ -9,7 +9,7 @@ import { TaskCard } from '@/components/tasks/TaskCard';
 import { TaskDetail } from '@/components/tasks/TaskDetail';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
-import { useAuth } from '@/lib/auth';
+import { useAuth, getDashboardPath } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { getClientTasks } from '@/lib/services';
 import { STATUS_CONFIG, ALL_STATUSES } from '@/lib/constants';
@@ -26,7 +26,10 @@ export default function ClientTasksPage() {
   useEffect(() => {
     if (loading) return;
     if (!profile) { router.push('/login'); return; }
-    if (profile.role !== 'client') { router.push('/login'); return; }
+    if (profile.role !== 'client') {
+      window.location.href = getDashboardPath(profile.role);
+      return;
+    }
 
     const fetchData = async () => {
       try {

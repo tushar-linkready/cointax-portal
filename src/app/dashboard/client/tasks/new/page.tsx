@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
-import { useAuth } from '@/lib/auth';
+import { useAuth, getDashboardPath } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { getCategories, createTask } from '@/lib/services';
 import type { TaskCategory } from '@/lib/types';
@@ -45,7 +45,10 @@ export default function ClientNewRequestPage() {
   useEffect(() => {
     if (loading) return;
     if (!profile) { router.push('/login'); return; }
-    if (profile.role !== 'client') { router.push('/login'); return; }
+    if (profile.role !== 'client') {
+      window.location.href = getDashboardPath(profile.role);
+      return;
+    }
 
     const fetchData = async () => {
       try {

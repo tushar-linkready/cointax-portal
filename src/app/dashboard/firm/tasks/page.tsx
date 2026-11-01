@@ -12,14 +12,18 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/lib/auth';
-import { getTasks, updateTask } from '@/lib/services';
+import { useToast } from '@/components/ui/Toast';
+import { getTasks, updateTask, getProfiles, getCategories } from '@/lib/services';
 import { ALL_STATUSES, ALL_PRIORITIES } from '@/lib/constants';
-import type { Task, TaskStatus, TaskPriority } from '@/lib/types';
+import type { Task, TaskStatus, TaskPriority, Profile, TaskCategory } from '@/lib/types';
 
 export default function FirmTasksPage() {
   const router = useRouter();
   const { profile, loading, firmId } = useAuth();
+  const { showToast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [teamMembers, setTeamMembers] = useState<Profile[]>([]);
+  const [categories, setCategories] = useState<TaskCategory[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,11 +37,21 @@ export default function FirmTasksPage() {
       router.push('/login');
       return;
     }
+    if (profile.role === 'client') {
+      window.location.href = '/dashboard/client';
+      return;
+    }
 
     const loadData = async () => {
       try {
-        const firmTasks = await getTasks(firmId!);
+        const [firmTasks, members, cats] = await Promise.all([
+          getTasks(firmId!),
+          getProfiles(firmId!),
+          getCategories(firmId!),
+        ]);
         setTasks(firmTasks);
+        setTeamMembers(members);
+        setCategories(cats);
       } catch (err) {
         console.error('Failed to load tasks:', err);
       } finally {
@@ -83,8 +97,13 @@ export default function FirmTasksPage() {
       }
     } catch (err) {
       console.error('Failed to update task status:', err);
-      alert('Failed to update task status. Please try again.');
+      showToast('Failed to update task status. Please try again.', 'error');
     }
+  };
+
+  const handleTaskUpdated = (updatedTask: Task) => {
+    setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
+    setSelectedTask(updatedTask);
   };
 
   const handleCloseModal = () => {
@@ -205,6 +224,9 @@ export default function FirmTasksPage() {
             <TaskDetail
               task={selectedTask}
               onStatusChange={handleStatusChange}
+              onTaskUpdated={handleTaskUpdated}
+              teamMembers={teamMembers}
+              categories={categories}
             />
           )}
         </Modal>

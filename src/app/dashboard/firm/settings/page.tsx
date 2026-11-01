@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { useAuth } from '@/lib/auth';
+import { useToast } from '@/components/ui/Toast';
 import { getFirm, updateFirm } from '@/lib/services';
 import type { Firm } from '@/lib/types';
 import {
@@ -59,8 +60,8 @@ const PLAN_LABELS: Record<string, string> = {
 export default function SettingsPage() {
   const router = useRouter();
   const { profile, loading, firmId } = useAuth();
+  const { showToast } = useToast();
   const [firm, setFirm] = useState<Firm | null>(null);
-  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [isDeactivateModalOpen, setIsDeactivateModalOpen] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
@@ -75,6 +76,10 @@ export default function SettingsPage() {
     if (loading) return;
     if (!profile) {
       router.push('/login');
+      return;
+    }
+    if (profile.role === 'client') {
+      window.location.href = '/dashboard/client';
       return;
     }
 
@@ -109,11 +114,10 @@ export default function SettingsPage() {
         address: formAddress.trim() || null,
       });
       setFirm(updated);
-      setShowSaveSuccess(true);
-      setTimeout(() => setShowSaveSuccess(false), 3000);
+      showToast('Settings saved successfully.', 'success');
     } catch (err) {
       console.error('Failed to save settings:', err);
-      alert('Failed to save settings. Please try again.');
+      showToast('Failed to save settings. Please try again.', 'error');
     }
   };
 
@@ -126,7 +130,7 @@ export default function SettingsPage() {
       setIsDeactivateModalOpen(false);
     } catch (err) {
       console.error('Failed to deactivate firm:', err);
-      alert('Failed to deactivate firm. Please try again.');
+      showToast('Failed to deactivate firm. Please try again.', 'error');
     }
   };
 
@@ -200,12 +204,6 @@ export default function SettingsPage() {
               />
               <div className="flex items-center gap-3 pt-2">
                 <Button type="submit">Save Changes</Button>
-                {showSaveSuccess && (
-                  <div className="flex items-center gap-1.5 text-sm text-green-600">
-                    <Check className="h-4 w-4" />
-                    <span>Settings saved successfully</span>
-                  </div>
-                )}
               </div>
             </form>
           </CardContent>
@@ -292,26 +290,64 @@ export default function SettingsPage() {
         isOpen={isUpgradeModalOpen}
         onClose={() => setIsUpgradeModalOpen(false)}
         title="Upgrade Plan"
-        size="sm"
+        size="lg"
       >
-        <div className="space-y-4">
-          <div className="flex flex-col items-center gap-3 py-4 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-50">
-              <Zap className="h-6 w-6 text-teal-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-900">
-                Contact Support to Upgrade
-              </p>
-              <p className="mt-1 text-sm text-gray-500">
-                Please reach out to our support team to upgrade your plan. We will
-                help you find the best plan for your firm&apos;s needs.
-              </p>
-            </div>
-            <div className="mt-2 rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-700">
-              Email: <span className="font-medium">support@cointaxfinance.com</span>
-            </div>
+        <div className="space-y-6">
+          <p className="text-sm text-gray-600">
+            Choose the plan that best fits your firm. Contact us to upgrade.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[
+              { name: 'Starter', price: '499', features: PLAN_FEATURES.starter, key: 'starter' },
+              { name: 'Pro', price: '999', features: PLAN_FEATURES.pro, key: 'pro' },
+              { name: 'Enterprise', price: '2,499', features: PLAN_FEATURES.enterprise, key: 'enterprise' },
+            ].map((plan) => (
+              <div
+                key={plan.key}
+                className={`rounded-xl border-2 p-4 ${
+                  firm.plan === plan.key
+                    ? 'border-teal-500 bg-teal-50/50'
+                    : 'border-gray-200'
+                }`}
+              >
+                <p className="font-semibold text-gray-900">{plan.name}</p>
+                <p className="mt-1">
+                  <span className="text-2xl font-bold text-[#1e3a5f]">&#8377;{plan.price}</span>
+                  <span className="text-xs text-gray-500">/mo</span>
+                </p>
+                {firm.plan === plan.key && (
+                  <span className="mt-2 inline-block rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-700">
+                    Current Plan
+                  </span>
+                )}
+                <ul className="mt-3 space-y-1.5">
+                  {plan.features.map((f, i) => (
+                    <li key={i} className="flex items-center gap-1.5 text-xs text-gray-600">
+                      <Check className="h-3 w-3 flex-shrink-0 text-teal-600" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
+
+          <div className="rounded-lg bg-gray-50 p-4 text-center space-y-2">
+            <p className="text-sm font-medium text-gray-900">
+              To upgrade, email us at:
+            </p>
+            <a
+              href="mailto:cointaxfinance@gmail.com?subject=Plan Upgrade Request"
+              className="text-sm font-semibold text-[#0d9488] hover:underline"
+            >
+              cointaxfinance@gmail.com
+            </a>
+            <p className="text-xs text-gray-400 mt-1">
+              Online plan upgrades coming soon
+            </p>
+          </div>
+
           <div className="flex justify-end">
             <Button
               variant="outline"

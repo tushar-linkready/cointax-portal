@@ -16,7 +16,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/Table';
-import { useAuth } from '@/lib/auth';
+import { useAuth, getDashboardPath } from '@/lib/auth';
 import { getFirms, getAllClients, updateFirm } from '@/lib/services';
 import { supabase } from '@/lib/supabase';
 import { formatDate } from '@/lib/utils';
@@ -60,6 +60,10 @@ export default function FirmsPage() {
   useEffect(() => {
     if (loading) return;
     if (!profile) { router.push('/login'); return; }
+    if (profile.role !== 'super_admin') {
+      window.location.href = getDashboardPath(profile.role);
+      return;
+    }
 
     const fetchData = async () => {
       try {

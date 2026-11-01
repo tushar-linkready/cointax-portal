@@ -104,7 +104,7 @@ export default function HomePage() {
               href="/login"
               className="inline-block rounded-lg border-2 border-white px-8 py-3 text-base font-semibold text-white hover:bg-white/10 transition-colors"
             >
-              See Demo
+              Sign In
             </Link>
           </div>
         </div>
@@ -214,19 +214,19 @@ export default function HomePage() {
               Cointax Financial Services LLP
             </p>
             <p className="text-sm mt-1">
-              &copy; 2024-2025 Cointax Financial Services LLP. All rights
+              &copy; 2024-2026 Cointax Financial Services LLP. All rights
               reserved.
             </p>
           </div>
           <div className="flex items-center gap-6 text-sm">
-            <Link href="#" className="hover:text-white transition-colors">
-              About
+            <a href="mailto:cointaxfinance@gmail.com" className="hover:text-white transition-colors">
+              Contact Us
+            </a>
+            <Link href="/login" className="hover:text-white transition-colors">
+              Sign In
             </Link>
-            <Link href="#" className="hover:text-white transition-colors">
-              Contact
-            </Link>
-            <Link href="#" className="hover:text-white transition-colors">
-              Privacy Policy
+            <Link href="/signup" className="hover:text-white transition-colors">
+              Sign Up
             </Link>
           </div>
         </div>

@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { useAuth } from '@/lib/auth';
+import { useToast } from '@/components/ui/Toast';
 import { getClients, getNextInvoiceNumber, createInvoice } from '@/lib/services';
 import { formatCurrency } from '@/lib/utils';
 import type { Client, InvoiceItem } from '@/lib/types';
@@ -24,6 +25,7 @@ const EMPTY_ITEM: InvoiceItem = {
 export default function NewInvoicePage() {
   const router = useRouter();
   const { profile, loading, firmId } = useAuth();
+  const { showToast } = useToast();
   const [firmClients, setFirmClients] = useState<Client[]>([]);
   const [clientId, setClientId] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -38,6 +40,10 @@ export default function NewInvoicePage() {
     if (loading) return;
     if (!profile) {
       router.push('/login');
+      return;
+    }
+    if (profile.role === 'client') {
+      window.location.href = '/dashboard/client';
       return;
     }
 
@@ -119,11 +125,11 @@ export default function NewInvoicePage() {
 
   const handleSave = async (sendAfterSave: boolean) => {
     if (!clientId) {
-      alert('Please select a client.');
+      showToast('Please select a client.', 'warning');
       return;
     }
     if (items.every((i) => !i.description.trim() || i.amount === 0)) {
-      alert('Please add at least one line item with a description and amount.');
+      showToast('Please add at least one line item with a description and amount.', 'warning');
       return;
     }
 
@@ -147,12 +153,12 @@ export default function NewInvoicePage() {
 
       if (sendAfterSave) {
         const client = firmClients.find(c => c.id === clientId);
-        alert(`Invoice ${invoiceNumber} saved and marked as Sent to ${client?.name ?? 'client'}.\n\nNote: Email delivery will be available once backend integration is complete.`);
+        showToast(`Invoice ${invoiceNumber} saved and marked as Sent to ${client?.name ?? 'client'}.`, 'success');
       }
       router.push('/dashboard/firm/invoices');
     } catch (err) {
       console.error('Failed to create invoice:', err);
-      alert('Failed to create invoice. Please try again.');
+      showToast('Failed to create invoice. Please try again.', 'error');
     } finally {
       setIsSaving(false);
     }

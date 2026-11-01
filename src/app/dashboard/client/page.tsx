@@ -10,7 +10,7 @@ import { TaskCard } from '@/components/tasks/TaskCard';
 import { TaskDetail } from '@/components/tasks/TaskDetail';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
-import { useAuth } from '@/lib/auth';
+import { useAuth, getDashboardPath } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { getClientTasks } from '@/lib/services';
 import type { Task } from '@/lib/types';
@@ -24,7 +24,10 @@ export default function ClientDashboardPage() {
   useEffect(() => {
     if (loading) return;
     if (!profile) { router.push('/login'); return; }
-    if (profile.role !== 'client') { router.push('/login'); return; }
+    if (profile.role !== 'client') {
+      window.location.href = getDashboardPath(profile.role);
+      return;
+    }
 
     // Find the client record linked to this user by email
     const fetchData = async () => {

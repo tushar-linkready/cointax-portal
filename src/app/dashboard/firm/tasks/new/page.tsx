@@ -9,13 +9,15 @@ import { TaskForm } from '@/components/tasks/TaskForm';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { useAuth } from '@/lib/auth';
-import { getClients, getCategories, getProfiles, createTask } from '@/lib/services';
+import { useToast } from '@/components/ui/Toast';
+import { getClients, getCategories, getProfiles, createTask, createNotification } from '@/lib/services';
 import type { Client, TaskCategory, Profile } from '@/lib/types';
 import type { TaskFormData } from '@/components/tasks/TaskForm';
 
 export default function NewTaskPage() {
   const router = useRouter();
   const { profile, loading, firmId } = useAuth();
+  const { showToast } = useToast();
   const [firmClients, setFirmClients] = useState<Client[]>([]);
   const [firmCategories, setFirmCategories] = useState<TaskCategory[]>([]);
   const [teamMembers, setTeamMembers] = useState<Profile[]>([]);
@@ -26,6 +28,10 @@ export default function NewTaskPage() {
     if (loading) return;
     if (!profile) {
       router.push('/login');
+      return;
+    }
+    if (profile.role === 'client') {
+      window.location.href = '/dashboard/client';
       return;
     }
 
@@ -50,7 +56,7 @@ export default function NewTaskPage() {
 
   const handleSubmit = async (data: TaskFormData) => {
     try {
-      await createTask({
+      const newTask = await createTask({
         firm_id: firmId!,
         client_id: data.client_id,
         category_id: data.category_id || null,
@@ -62,10 +68,22 @@ export default function NewTaskPage() {
         created_by: profile!.id,
         due_date: data.due_date || null,
       });
+
+      // Notify the assignee if one was selected
+      if (data.assignee_id && data.assignee_id !== profile!.id) {
+        createNotification({
+          user_id: data.assignee_id,
+          firm_id: firmId,
+          title: 'New task assigned to you',
+          message: `"${data.title}" has been assigned to you by ${profile!.full_name}.`,
+          link: `/dashboard/firm/tasks`,
+        }).catch(console.error);
+      }
+
       setSubmitted(true);
     } catch (err) {
       console.error('Failed to create task:', err);
-      alert('Failed to create task. Please try again.');
+      showToast('Failed to create task. Please try again.', 'error');
     }
   };
 

@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Card, CardContent } from '@/components/ui/Card';
 import { useAuth } from '@/lib/auth';
-import { getProfiles, getTasks } from '@/lib/services';
+import { useToast } from '@/components/ui/Toast';
+import { getProfiles, getTasks, inviteTeamMember } from '@/lib/services';
 import { getInitials } from '@/lib/utils';
 import type { Profile, Task } from '@/lib/types';
 import { Plus, UserCog, Mail, Phone, ClipboardList } from 'lucide-react';
@@ -27,6 +28,7 @@ const ROLE_LABELS: Record<string, string> = {
 export default function TeamPage() {
   const router = useRouter();
   const { profile, loading, firmId } = useAuth();
+  const { showToast } = useToast();
   const [team, setTeam] = useState<Profile[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -41,6 +43,10 @@ export default function TeamPage() {
     if (loading) return;
     if (!profile) {
       router.push('/login');
+      return;
+    }
+    if (profile.role === 'client') {
+      window.location.href = '/dashboard/client';
       return;
     }
 
@@ -76,27 +82,33 @@ export default function TeamPage() {
     setFormPhone('');
   };
 
-  const handleInviteMember = (e: React.FormEvent) => {
+  const handleInviteMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formEmail.trim()) return;
 
-    // Note: actual invite flow would send an invitation email via backend
-    const newMember: Profile = {
-      id: `user-${Date.now()}`,
-      firm_id: firmId ?? null,
-      full_name: formName.trim(),
-      email: formEmail.trim(),
-      role: 'team_member',
-      avatar_url: null,
-      phone: formPhone.trim() || null,
-      is_active: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+    try {
+      await inviteTeamMember({
+        firm_id: firmId!,
+        full_name: formName.trim(),
+        email: formEmail.trim(),
+        phone: formPhone.trim() || null,
+        role: 'team_member',
+      });
 
-    setTeam((prev) => [...prev, newMember]);
-    resetForm();
-    setIsModalOpen(false);
+      // Re-fetch the team list from Supabase
+      const profiles = await getProfiles(firmId!);
+      const firmTeam = profiles.filter(
+        (p) => p.role === 'team_member' || p.role === 'firm_admin'
+      );
+      setTeam(firmTeam);
+
+      resetForm();
+      setIsModalOpen(false);
+      showToast('Team member invited successfully. They\'ll need to sign up with this email to access the portal.', 'success');
+    } catch (err) {
+      console.error('Failed to invite team member:', err);
+      showToast('Failed to invite team member. Please try again.', 'error');
+    }
   };
 
   if (loading || dataLoading) {

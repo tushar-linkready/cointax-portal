@@ -6,7 +6,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { useAuth } from '@/lib/auth';
+import { useAuth, getDashboardPath } from '@/lib/auth';
 import { getSuperAdminStats, getFirms, getAllTasks, getAllClients } from '@/lib/services';
 import { formatCurrency } from '@/lib/utils';
 import { Building2, CheckCircle, IndianRupee, Users } from 'lucide-react';
@@ -30,6 +30,10 @@ export default function SuperAdminDashboard() {
   useEffect(() => {
     if (loading) return;
     if (!profile) { router.push('/login'); return; }
+    if (profile.role !== 'super_admin') {
+      window.location.href = getDashboardPath(profile.role);
+      return;
+    }
 
     const fetchData = async () => {
       try {

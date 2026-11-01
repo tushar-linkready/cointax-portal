@@ -17,6 +17,7 @@ import {
   TableCell,
 } from '@/components/ui/Table';
 import { useAuth } from '@/lib/auth';
+import { useToast } from '@/components/ui/Toast';
 import { getClients, createClient, updateClient } from '@/lib/services';
 import { formatDate } from '@/lib/utils';
 import type { Client, Profile } from '@/lib/types';
@@ -25,6 +26,7 @@ import { Plus, Search, Pencil, Users } from 'lucide-react';
 export default function ClientsPage() {
   const router = useRouter();
   const { profile, loading, firmId } = useAuth();
+  const { showToast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -44,6 +46,10 @@ export default function ClientsPage() {
     if (loading) return;
     if (!profile) {
       router.push('/login');
+      return;
+    }
+    if (profile.role === 'client') {
+      window.location.href = '/dashboard/client';
       return;
     }
 
@@ -103,7 +109,7 @@ export default function ClientsPage() {
       setIsAddModalOpen(false);
     } catch (err) {
       console.error('Failed to create client:', err);
-      alert('Failed to create client. Please try again.');
+      showToast('Failed to create client. Please try again.', 'error');
     }
   };
 
@@ -128,7 +134,7 @@ export default function ClientsPage() {
       setEditingClient(null);
     } catch (err) {
       console.error('Failed to update client:', err);
-      alert('Failed to update client. Please try again.');
+      showToast('Failed to update client. Please try again.', 'error');
     }
   };
 
@@ -156,7 +162,7 @@ export default function ClientsPage() {
       );
     } catch (err) {
       console.error('Failed to toggle client status:', err);
-      alert('Failed to update client status. Please try again.');
+      showToast('Failed to update client status. Please try again.', 'error');
     }
   };
 

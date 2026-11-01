@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Search, Eye, IndianRupee, AlertTriangle, Clock, CheckCircle2, Mail, MessageCircle } from 'lucide-react';
+import { Plus, Search, Eye, IndianRupee, AlertTriangle, Clock, CheckCircle2, Mail, MessageCircle, Download, Pencil } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/lib/auth';
+import { useToast } from '@/components/ui/Toast';
 import { getInvoices, updateInvoice } from '@/lib/services';
 import { INVOICE_STATUS_CONFIG, ALL_INVOICE_STATUSES } from '@/lib/constants';
 import { formatDate, formatCurrency } from '@/lib/utils';
@@ -85,9 +86,113 @@ function openWhatsAppForInvoice(inv: Invoice) {
   window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
 }
 
+function handleDownloadPDF(inv: Invoice) {
+  const itemsHtml = inv.items
+    .map(
+      (item, i) =>
+        `<tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${i + 1}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${item.description}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right">${item.quantity}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right">${formatCurrency(item.rate)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600">${formatCurrency(item.amount)}</td>
+        </tr>`
+    )
+    .join('');
+
+  const html = `<!DOCTYPE html>
+<html><head><title>Invoice ${inv.invoice_number}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1f2937; padding: 40px; }
+  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:40px; }
+  .company { font-size:24px; font-weight:700; color:#1e3a5f; }
+  .company-sub { font-size:12px; color:#6b7280; margin-top:4px; }
+  .inv-title { font-size:28px; font-weight:700; color:#1e3a5f; text-align:right; }
+  .inv-number { font-size:14px; color:#6b7280; text-align:right; margin-top:4px; }
+  .meta-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:32px; }
+  .meta-box { background:#f9fafb; border-radius:8px; padding:16px; }
+  .meta-label { font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#6b7280; font-weight:600; margin-bottom:6px; }
+  .meta-value { font-size:14px; font-weight:500; }
+  table { width:100%; border-collapse:collapse; margin-bottom:24px; }
+  thead th { background:#1e3a5f; color:white; padding:10px 12px; font-size:12px; text-transform:uppercase; letter-spacing:0.05em; text-align:left; }
+  thead th:nth-child(n+3) { text-align:right; }
+  .totals { display:flex; flex-direction:column; align-items:flex-end; margin-bottom:24px; }
+  .total-row { display:flex; justify-content:space-between; width:300px; padding:6px 0; font-size:14px; }
+  .total-row.grand { border-top:2px solid #1e3a5f; padding-top:10px; margin-top:4px; font-size:16px; font-weight:700; color:#1e3a5f; }
+  .notes { background:#f0fdf4; border-left:4px solid #0d9488; padding:12px 16px; border-radius:4px; font-size:13px; margin-bottom:24px; }
+  .footer { text-align:center; font-size:11px; color:#9ca3af; border-top:1px solid #e5e7eb; padding-top:16px; }
+  @media print { body { padding:20px; } }
+</style>
+</head><body>
+  <div class="header">
+    <div>
+      <div class="company">Cointax Financial Services LLP</div>
+      <div class="company-sub">CA Firm Management Portal</div>
+    </div>
+    <div>
+      <div class="inv-title">INVOICE</div>
+      <div class="inv-number">${inv.invoice_number}</div>
+    </div>
+  </div>
+
+  <div class="meta-grid">
+    <div class="meta-box">
+      <div class="meta-label">Bill To</div>
+      <div class="meta-value">${inv.client?.name ?? '-'}</div>
+      ${inv.client?.company_name ? `<div style="font-size:13px;color:#6b7280">${inv.client.company_name}</div>` : ''}
+      ${inv.client?.email ? `<div style="font-size:13px;color:#6b7280">${inv.client.email}</div>` : ''}
+      ${inv.client?.phone ? `<div style="font-size:13px;color:#6b7280">${inv.client.phone}</div>` : ''}
+      ${inv.client?.pan_number ? `<div style="font-size:13px;color:#6b7280">PAN: ${inv.client.pan_number}</div>` : ''}
+      ${inv.client?.gst_number ? `<div style="font-size:13px;color:#6b7280">GST: ${inv.client.gst_number}</div>` : ''}
+    </div>
+    <div class="meta-box">
+      <div class="meta-label">Invoice Details</div>
+      <div style="font-size:13px"><strong>Date:</strong> ${formatDate(inv.created_at)}</div>
+      <div style="font-size:13px"><strong>Due Date:</strong> ${formatDate(inv.due_date)}</div>
+      <div style="font-size:13px"><strong>Status:</strong> ${inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}</div>
+      ${inv.paid_date ? `<div style="font-size:13px"><strong>Paid:</strong> ${formatDate(inv.paid_date)}</div>` : ''}
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40px">#</th>
+        <th>Description</th>
+        <th style="text-align:right">Qty</th>
+        <th style="text-align:right">Rate</th>
+        <th style="text-align:right">Amount</th>
+      </tr>
+    </thead>
+    <tbody>${itemsHtml}</tbody>
+  </table>
+
+  <div class="totals">
+    <div class="total-row"><span>Subtotal</span><span>${formatCurrency(inv.subtotal)}</span></div>
+    <div class="total-row"><span>GST @ ${inv.gst_rate}%</span><span>${formatCurrency(inv.gst_amount)}</span></div>
+    <div class="total-row grand"><span>Total</span><span>${formatCurrency(inv.total)}</span></div>
+  </div>
+
+  ${inv.notes ? `<div class="notes"><strong>Notes:</strong> ${inv.notes}</div>` : ''}
+
+  <div class="footer">
+    Generated by Cointax Portal &mdash; portal.cointaxfinance.com
+  </div>
+</body></html>`;
+
+  const printWindow = window.open('', '_blank');
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+    setTimeout(() => printWindow.print(), 500);
+  }
+}
+
 export default function FirmInvoicesPage() {
   const router = useRouter();
   const { profile, loading, firmId } = useAuth();
+  const { showToast } = useToast();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -99,6 +204,10 @@ export default function FirmInvoicesPage() {
     if (loading) return;
     if (!profile) {
       router.push('/login');
+      return;
+    }
+    if (profile.role === 'client') {
+      window.location.href = '/dashboard/client';
       return;
     }
 
@@ -170,7 +279,7 @@ export default function FirmInvoicesPage() {
       setSelectedInvoice((prev) => (prev && prev.id === invoiceId ? updated : prev));
     } catch (err) {
       console.error('Failed to update invoice:', err);
-      alert('Failed to update invoice. Please try again.');
+      showToast('Failed to update invoice. Please try again.', 'error');
     }
   };
 
@@ -427,11 +536,19 @@ export default function FirmInvoicesPage() {
                 </div>
               )}
 
-              {/* Send buttons */}
+              {/* Actions */}
               {selectedInvoice.status !== 'cancelled' && (
                 <div className="border-t border-gray-200 pt-4">
-                  <p className="text-xs font-medium text-gray-500 mb-2">Send Invoice</p>
+                  <p className="text-xs font-medium text-gray-500 mb-2">Actions</p>
                   <div className="flex gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownloadPDF(selectedInvoice)}
+                    >
+                      <Download className="w-4 h-4 mr-1" />
+                      Download PDF
+                    </Button>
                     {selectedInvoice.client?.email && (
                       <Button
                         variant="outline"
@@ -450,6 +567,19 @@ export default function FirmInvoicesPage() {
                       >
                         <MessageCircle className="w-4 h-4 mr-1" />
                         Send WhatsApp
+                      </Button>
+                    )}
+                    {selectedInvoice.status === 'draft' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setIsModalOpen(false);
+                          router.push(`/dashboard/firm/invoices/${selectedInvoice.id}/edit`);
+                        }}
+                      >
+                        <Pencil className="w-4 h-4 mr-1" />
+                        Edit Invoice
                       </Button>
                     )}
                   </div>
