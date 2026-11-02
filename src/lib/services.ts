@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import type {
   Firm, Profile, Client, TaskCategory, Task, TaskComment, TaskAttachment,
   Notification, Invoice, InvoiceItem, InvoiceStatus, TaskStatus, TaskPriority,
-} from './types';h
+} from './types';
 
 // ============================================================
 // Firms
