@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import type {
   Firm, Profile, Client, TaskCategory, Task, TaskComment, TaskAttachment,
   Notification, Invoice, InvoiceItem, InvoiceStatus, TaskStatus, TaskPriority,
-} from './types';
+} from './types';h
 
 // ============================================================
 // Firms
@@ -414,14 +414,14 @@ export async function inviteTeamMember(member: {
   phone?: string | null;
   role: 'team_member';
 }): Promise<Profile> {
-  const id = crypto.randomUUID();
-  const { data, error } = await supabase
-    .from('profiles')
-    .insert({ id, ...member, is_active: true })
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
+  const res = await fetch('/api/invite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(member),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to invite team member');
+  return json.profile;
 }
 
 // ============================================================
